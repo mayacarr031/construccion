@@ -1,123 +1,657 @@
-from fastapi import FastAPI, Form, Response, Cookie, Depends, HTTPException, Request
+from fastapi import FastAPI, HTTPException, Form, Response, Cookie, Depends
 from fastapi.responses import HTMLResponse, RedirectResponse
-from fastapi.staticfiles import StaticFiles
-from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel
 from transformers import pipeline
-import pandas as pd
-import os
-import bcrypt
+import pymysql
 
-app = FastAPI(title="StudioLumina - Servidor Inteligente")
+app = FastAPI(title="API de Análisis de Sentimientos con MySQL")
 
-# Montaje de estáticos y plantillas
-app.mount("/static", StaticFiles(directory="static"), name="static")
-templates = Jinja2Templates(directory="templates")
+# Configuración de conexión a MySQL
+def get_db_connection():
+    # Intentar conexión con los parámetros del entorno de desarrollo local (puerto 3308 y contraseña 'lasalle')
+    try:
+        return pymysql.connect(
+            host='localhost',
+            port=3308,
+            user='root',
+            password='lasalle',
+            database='db_sentimientos',
+            cursorclass=pymysql.cursors.DictCursor
+        )
+    except Exception:
+        # Fallback a los parámetros predeterminados de la tarea escolar (puerto 3306 y contraseña 'password')
+        return pymysql.connect(
+            host='localhost',
+            port=3306,
+            user='root',
+            password='password',
+            database='db_sentimientos',
+            cursorclass=pymysql.cursors.DictCursor
+        )
 
-# Carga perezosa/global del clasificador local
-print("Cargando modelo DistilBERT de HuggingFace en memoria local...")
+# Carga del modelo global en memoria
+print("Cargando modelo de Análisis de Sentimientos...")
 clasificador = pipeline("sentiment-analysis", model="distilbert-base-uncased-finetuned-sst-2-english")
 
-class TweetInput(BaseModel):
+class PredictRequest(BaseModel):
+    id_tweet: int
+
+class LivePredictRequest(BaseModel):
     text: str
 
-# Middleware de Seguridad Local mediante cookies
-def obtener_usuario_actual(session_user: str = Cookie(None)):
-    if not session_user or not session_user.endswith("@lasallistas.org.mx"):
-        raise HTTPException(status_code=401, detail="No autorizado")
-    return session_user
-
-# --- RUTAS FRONTEND ---
-
-# --- RUTAS FRONTEND (MÁXIMA COMPATIBILIDAD) ---
-
 @app.get("/login", response_class=HTMLResponse)
-def vista_login(request: Request, error: str = None):
-    return templates.TemplateResponse(
-        request=request,
-        name="login.html",
-        context={"error": error}
-    )
-
-@app.get("/", response_class=HTMLResponse)
-def frontend(request: Request, session_user: str = Cookie(None)):
-    if not session_user or not session_user.endswith("@lasallistas.org.mx"):
-        return RedirectResponse(url="/login", status_code=303)
-        
-    return templates.TemplateResponse(
-        request=request,
-        name="index.html",
-        context={"user": session_user}
-    )
-
-CONTRASENA_PLANA = "12345"
-# Generamos el hash seguro que simula cómo estaría guardado en una base de datos
-HASH_PROVISTO = bcrypt.hashpw(CONTRASENA_PLANA.encode('utf-8'), bcrypt.gensalt())
-
-
-# --- LÓGICA DE CONTROL DE ACCESO ACTUALIZADA ---
+def vista_login(error: str = None):
+    error_msg = f'<div class="error-msg">{error}</div>' if error else ''
+    return f"""
+    <!DOCTYPE html>
+    <html lang="es">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Iniciar Sesión - Control de Sentimientos</title>
+        <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet" />
+        <style>
+            :root {{
+                --bg-color: #0f172a;
+                --card-bg: rgba(30, 41, 59, 0.7);
+                --text-color: #e2e8f0;
+                --text-muted: #94a3b8;
+                --primary: #3b82f6;
+                --border-color: rgba(255, 255, 255, 0.08);
+                --gradient: linear-gradient(135deg, #3b82f6 0%, #8b5cf6 100%);
+            }}
+            body {{
+                font-family: 'Plus Jakarta Sans', Arial, sans-serif;
+                background-color: var(--bg-color);
+                color: var(--text-color);
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                min-height: 100vh;
+                margin: 0;
+                background-image: 
+                    radial-gradient(at 0% 0%, rgba(59, 130, 246, 0.1) 0px, transparent 50%),
+                    radial-gradient(at 100% 0%, rgba(139, 92, 246, 0.1) 0px, transparent 50%);
+                background-attachment: fixed;
+            }}
+            .login-container {{
+                background: var(--card-bg);
+                border: 1px solid var(--border-color);
+                border-radius: 16px;
+                padding: 40px;
+                width: 100%;
+                max-width: 400px;
+                box-shadow: 0 10px 30px -10px rgba(0, 0, 0, 0.5);
+                backdrop-filter: blur(12px);
+            }}
+            h2 {{
+                font-size: 1.8rem;
+                font-weight: 700;
+                margin: 0 0 10px 0;
+                text-align: center;
+                background: var(--gradient);
+                -webkit-background-clip: text;
+                -webkit-text-fill-color: transparent;
+            }}
+            p {{
+                color: var(--text-muted);
+                text-align: center;
+                margin-top: 0;
+                margin-bottom: 30px;
+                font-size: 0.95rem;
+            }}
+            .form-group {{
+                margin-bottom: 20px;
+            }}
+            label {{
+                display: block;
+                margin-bottom: 8px;
+                font-size: 0.9rem;
+                font-weight: 500;
+                color: var(--text-color);
+            }}
+            input {{
+                width: 100%;
+                box-sizing: border-box;
+                background: rgba(15, 23, 42, 0.6);
+                border: 1px solid var(--border-color);
+                border-radius: 8px;
+                color: #fff;
+                padding: 12px 16px;
+                font-size: 0.95rem;
+                outline: none;
+                transition: border-color 0.2s;
+            }}
+            input:focus {{
+                border-color: var(--primary);
+            }}
+            button {{
+                width: 100%;
+                background: var(--gradient);
+                color: white;
+                border: none;
+                padding: 12px;
+                cursor: pointer;
+                border-radius: 8px;
+                font-weight: 600;
+                font-size: 1rem;
+                transition: all 0.2s ease;
+                box-shadow: 0 4px 12px rgba(59, 130, 246, 0.25);
+                margin-top: 10px;
+            }}
+            button:hover {{
+                opacity: 0.95;
+                transform: translateY(-1px);
+                box-shadow: 0 6px 16px rgba(59, 130, 246, 0.4);
+            }}
+            .error-msg {{
+                background: rgba(239, 68, 68, 0.15);
+                color: #f87171;
+                border: 1px solid rgba(239, 68, 68, 0.3);
+                padding: 12px;
+                border-radius: 8px;
+                font-size: 0.9rem;
+                margin-bottom: 20px;
+                text-align: center;
+            }}
+        </style>
+    </head>
+    <body>
+        <div class="login-container">
+            <h2>Acceso al Sistema</h2>
+            <p>Ingresa tus credenciales para continuar</p>
+            {error_msg}
+            <form action="/login" method="POST">
+                <div class="form-group">
+                    <label for="username">Usuario</label>
+                    <input type="text" id="username" name="username" placeholder="admin" required autocomplete="username">
+                </div>
+                <div class="form-group">
+                    <label for="password">Contraseña</label>
+                    <input type="password" id="password" name="password" placeholder="••••••••" required autocomplete="current-password">
+                </div>
+                <button type="submit">Iniciar Sesión</button>
+            </form>
+        </div>
+    </body>
+    </html>
+    """
 
 @app.post("/login")
-def procesar_login(email: str = Form(...), password: str = Form(...)):
-    # 1. Validación estricta del dominio solicitado
-    if not email.endswith("@lasallistas.org.mx"):
-        return RedirectResponse(
-            url="/login?error=Correo%20no%20valido.%20Debe%20ser%20@lasallistas.org.mx", 
-            status_code=303
-        )
-    
-    # 2. Validación segura de la contraseña mediante Bcrypt
-    # Comparamos la contraseña enviada en el formulario contra el Hash seguro
-    es_valida = bcrypt.checkpw(password.encode('utf-8'), HASH_PROVISTO)
-    
-    if es_valida:
-        res = RedirectResponse(url="/", status_code=303)
-        # Seteamos la cookie de sesión por 1 hora (3600 segundos)
-        res.set_cookie(key="session_user", value=email, max_age=3600, httponly=True)
-        return res
+def procesar_login(username: str = Form(...), password: str = Form(...)):
+    if username == "admin" and password == "12345":
+        response = RedirectResponse(url="/", status_code=303)
+        response.set_cookie(key="session_user", value="admin", max_age=3600, httponly=True)
+        return response
     else:
-        # Si la contraseña es incorrecta, devolvemos el error a la plantilla
-        return RedirectResponse(
-            url="/login?error=Contraseña%20institucional%20incorrecta.", 
-            status_code=303
-        )
+        return RedirectResponse(url="/login?error=Usuario%20o%20contrase%C3%B1a%20incorrectos.", status_code=303)
 
 @app.get("/logout")
 def cerrar_sesion():
-    res = RedirectResponse(url="/login", status_code=303)
-    res.delete_cookie("session_user")
-    return res
+    response = RedirectResponse(url="/login", status_code=303)
+    response.delete_cookie("session_user")
+    return response
 
-# --- ENDPOINTS API (IA INFERENCIA) ---
+@app.get("/tweets")
+def obtener_tweets(session_user: str = Cookie(None)):
+    """Retorna los primeros 20 tweets almacenados en la base de datos para visualizarlos en el Front."""
+    if session_user != "admin":
+        raise HTTPException(status_code=401, detail="No autorizado")
+    
+    connection = get_db_connection()
+    try:
+        with connection.cursor() as cursor:
+            cursor.execute("SELECT id_tweet, entity, sentiment_real, tweet_text, sentiment_prediction FROM tweets LIMIT 20")
+            resultado = cursor.fetchall()
+            return resultado
+    finally:
+        connection.close()
+
+@app.post("/predict-db")
+def analizar_y_guardar_tweet(request: PredictRequest, session_user: str = Cookie(None)):
+    """Obtiene un tweet específico por ID de MySQL, lo analiza con el LLM local y guarda la predicción en la BD."""
+    if session_user != "admin":
+        raise HTTPException(status_code=401, detail="No autorizado")
+        
+    connection = get_db_connection()
+    try:
+        with connection.cursor() as cursor:
+            # 1. Buscar el tweet en MySQL
+            cursor.execute("SELECT tweet_text FROM tweets WHERE id_tweet = %s", (request.id_tweet,))
+            row = cursor.fetchone()
+            
+            if not row:
+                raise HTTPException(status_code=404, detail="Tweet no encontrado en la base de datos.")
+            
+            texto = row['tweet_text']
+            
+            # 2. Inferencia local con el modelo
+            prediction = clasificador(texto[:512])[0]
+            label_pred = prediction['label']
+            confidence_pred = round(prediction['score'], 4)
+            
+            # 3. Persistir el resultado en la base de datos
+            sql_update = """
+                UPDATE tweets 
+                SET sentiment_prediction = %s, confidence = %s 
+                WHERE id_tweet = %s
+            """
+            cursor.execute(sql_update, (label_pred, confidence_pred, request.id_tweet))
+            connection.commit()
+            
+            return {
+                "id_tweet": request.id_tweet,
+                "text": texto,
+                "sentiment_llm": label_pred,
+                "confidence": confidence_pred,
+                "status": "Actualizado en Base de Datos"
+            }
+    finally:
+        connection.close()
 
 @app.post("/predict")
-def analizar_texto(input_data: TweetInput, usuario: str = Depends(obtener_usuario_actual)):
-    prediction = clasificador(input_data.text[:512])[0]
+def analizar_texto(request: LivePredictRequest, session_user: str = Cookie(None)):
+    """Inferencia al vuelo para texto ingresado manualmente por el usuario."""
+    if session_user != "admin":
+        raise HTTPException(status_code=401, detail="No autorizado")
+        
+    prediction = clasificador(request.text[:512])[0]
     return {
-        "text": input_data.text,
+        "text": request.text,
         "sentiment": prediction['label'],
         "confidence": round(prediction['score'], 4)
     }
 
-@app.get("/api/dataset")
-def get_dataset_comparacion(usuario: str = Depends(obtener_usuario_actual)):
-    dataset_path = os.path.join("data", "twitter_validation.csv")
-    if not os.path.exists(dataset_path):
-        raise HTTPException(status_code=404, detail="Dataset no encontrado. Corre primero download_dataset.py")
+@app.get("/", response_class=HTMLResponse)
+def frontend(session_user: str = Cookie(None)):
+    if session_user != "admin":
+        return RedirectResponse(url="/login", status_code=303)
+        
+    return """
+    <!DOCTYPE html>
+    <html lang="es">
+        <head>
+            <meta charset="UTF-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <title>Panel de Control de Sentimientos (MySQL)</title>
+            <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet" />
+            <style>
+                :root {
+                    --bg-color: #0f172a;
+                    --card-bg: rgba(30, 41, 59, 0.7);
+                    --text-color: #e2e8f0;
+                    --text-muted: #94a3b8;
+                    --primary: #3b82f6;
+                    --border-color: rgba(255, 255, 255, 0.08);
+                    --gradient: linear-gradient(135deg, #3b82f6 0%, #8b5cf6 100%);
+                }
+                body { 
+                    font-family: 'Plus Jakarta Sans', Arial, sans-serif; 
+                    margin: 0;
+                    padding: 0; 
+                    background-color: var(--bg-color); 
+                    color: var(--text-color);
+                    min-height: 100vh;
+                    background-image: 
+                        radial-gradient(at 0% 0%, rgba(59, 130, 246, 0.1) 0px, transparent 50%),
+                        radial-gradient(at 100% 0%, rgba(139, 92, 246, 0.1) 0px, transparent 50%);
+                    background-attachment: fixed;
+                }
+                header {
+                    background: rgba(15, 23, 42, 0.8);
+                    backdrop-filter: blur(12px);
+                    border-bottom: 1px solid var(--border-color);
+                    padding: 16px 40px;
+                    position: sticky;
+                    top: 0;
+                    z-index: 50;
+                }
+                .nav-container {
+                    max-width: 1200px;
+                    margin: 0 auto;
+                    display: flex;
+                    justify-content: space-between;
+                    align-items: center;
+                }
+                .nav-title {
+                    font-size: 1.4rem;
+                    font-weight: 700;
+                    background: var(--gradient);
+                    -webkit-background-clip: text;
+                    -webkit-text-fill-color: transparent;
+                }
+                .nav-user {
+                    display: flex;
+                    align-items: center;
+                    gap: 15px;
+                    font-size: 0.9rem;
+                }
+                .logout-btn {
+                    background: rgba(239, 68, 68, 0.1);
+                    color: #ef4444;
+                    border: 1px solid rgba(239, 68, 68, 0.2);
+                    padding: 8px 16px;
+                    border-radius: 8px;
+                    text-decoration: none;
+                    font-weight: 600;
+                    font-size: 0.85rem;
+                    transition: all 0.2s;
+                }
+                .logout-btn:hover {
+                    background: rgba(239, 68, 68, 0.2);
+                    border-color: rgba(239, 68, 68, 0.4);
+                }
+                .container {
+                    max-width: 1200px;
+                    margin: 40px auto;
+                    padding: 0 20px;
+                }
+                h2 {
+                    font-size: 2rem;
+                    font-weight: 700;
+                    margin: 0 0 10px 0;
+                    color: #fff;
+                }
+                .desc {
+                    color: var(--text-muted);
+                    font-size: 1.05rem;
+                    margin: 0 0 30px 0;
+                    line-height: 1.5;
+                }
+                .grid {
+                    display: grid;
+                    grid-template-columns: 1fr;
+                    gap: 30px;
+                    margin-bottom: 40px;
+                }
+                @media (min-width: 768px) {
+                    .grid {
+                        grid-template-columns: 1fr 1fr;
+                    }
+                }
+                .card {
+                    background: var(--card-bg);
+                    border: 1px solid var(--border-color);
+                    border-radius: 16px;
+                    padding: 24px;
+                    backdrop-filter: blur(12px);
+                    box-shadow: 0 10px 30px -10px rgba(0, 0, 0, 0.5);
+                }
+                .card-title {
+                    font-size: 1.25rem;
+                    font-weight: 700;
+                    margin-top: 0;
+                    margin-bottom: 20px;
+                    color: #fff;
+                    display: flex;
+                    align-items: center;
+                    gap: 8px;
+                }
+                textarea {
+                    width: 100%;
+                    box-sizing: border-box;
+                    background: rgba(15, 23, 42, 0.6);
+                    border: 1px solid var(--border-color);
+                    border-radius: 8px;
+                    color: #fff;
+                    padding: 16px;
+                    font-size: 0.95rem;
+                    outline: none;
+                    transition: border-color 0.2s;
+                    resize: none;
+                    height: 120px;
+                    font-family: inherit;
+                }
+                textarea:focus {
+                    border-color: var(--primary);
+                }
+                .btn-container {
+                    display: flex;
+                    justify-content: flex-end;
+                    margin-top: 15px;
+                }
+                button { 
+                    background: var(--gradient); 
+                    color: white; 
+                    border: none; 
+                    padding: 10px 18px; 
+                    cursor: pointer; 
+                    border-radius: 8px; 
+                    font-weight: 600;
+                    font-size: 0.85rem;
+                    transition: all 0.2s ease;
+                    box-shadow: 0 4px 12px rgba(59, 130, 246, 0.25);
+                    white-space: nowrap;
+                }
+                button:hover { 
+                    transform: translateY(-1px);
+                    box-shadow: 0 6px 16px rgba(59, 130, 246, 0.4);
+                    opacity: 0.95;
+                }
+                button:active {
+                    transform: translateY(1px);
+                }
+                .result-box {
+                    margin-top: 20px;
+                    padding: 16px;
+                    border-radius: 8px;
+                    border: 1px solid var(--border-color);
+                    display: none;
+                    background: rgba(255, 255, 255, 0.02);
+                }
+                .result-box.active {
+                    display: block;
+                }
+                .result-box.result-POSITIVE {
+                    background: rgba(16, 185, 129, 0.1);
+                    border-color: rgba(16, 185, 129, 0.3);
+                    color: #34d399;
+                }
+                .result-box.result-NEGATIVE {
+                    background: rgba(239, 68, 68, 0.1);
+                    border-color: rgba(239, 68, 68, 0.3);
+                    color: #f87171;
+                }
+                .result-label {
+                    font-weight: 700;
+                    font-size: 1.1rem;
+                    margin-bottom: 4px;
+                }
+                .result-score {
+                    font-size: 0.9rem;
+                    opacity: 0.8;
+                }
+                .table-container {
+                    background: var(--card-bg);
+                    border: 1px solid var(--border-color);
+                    border-radius: 16px;
+                    overflow: hidden;
+                    box-shadow: 0 10px 30px -10px rgba(0, 0, 0, 0.5);
+                    backdrop-filter: blur(12px);
+                }
+                table { 
+                    width: 100%; 
+                    border-collapse: collapse; 
+                    background: transparent; 
+                }
+                th, td { 
+                    padding: 16px 20px; 
+                    border-bottom: 1px solid var(--border-color); 
+                    text-align: left; 
+                }
+                th { 
+                    background-color: rgba(15, 23, 42, 0.8); 
+                    color: var(--text-color); 
+                    font-weight: 600;
+                    text-transform: uppercase;
+                    font-size: 0.8rem;
+                    letter-spacing: 0.05em;
+                }
+                tr:last-child td {
+                    border-bottom: none;
+                }
+                tr:hover { 
+                    background-color: rgba(255, 255, 255, 0.02); 
+                }
+                strong {
+                    color: #fff;
+                }
+                td i {
+                    color: var(--text-muted);
+                }
+            </style>
+        </head>
+        <body>
+            <header>
+                <div class="nav-container">
+                    <div class="nav-title">StudioLumina</div>
+                    <div class="nav-user">
+                        <span>👤 Usuario: <strong>admin</strong></span>
+                        <a href="/logout" class="logout-btn">Cerrar Sesión</a>
+                    </div>
+                </div>
+            </header>
 
-    columnas = ['ID', 'Entity', 'Sentiment', 'Tweet']
-    # Leemos mapeando directamente las columnas sin importar si el archivo tiene cabecera o no
-    df = pd.read_csv(dataset_path, names=columnas, header=None, encoding='utf-8', on_bad_lines='skip').dropna().head(20)
+            <div class="container">
+                <div class="grid">
+                    <div>
+                        <h2>Panel de Control Inteligente</h2>
+                        <p class="desc">Administra el modelo local HuggingFace de clasificación de sentimientos y la base de datos MySQL en tiempo real.</p>
+                    </div>
+                    
+                    <div class="card">
+                        <div class="card-title">🔍 Analizador de Texto en Vivo</div>
+                        <textarea id="liveTextInput" placeholder="Escribe un comentario en inglés para analizar su sentimiento..."></textarea>
+                        <div class="btn-container">
+                            <button id="liveAnalyzeBtn" onclick="analizarTextoEnVivo()">Analizar Sentimiento</button>
+                        </div>
+                        <div id="liveResultBox" class="result-box">
+                            <div id="liveResultLabel" class="result-label"></div>
+                            <div id="liveResultScore" class="result-score"></div>
+                        </div>
+                    </div>
+                </div>
+                
+                <h2>Base de Datos Local (MySQL)</h2>
+                <p class="desc">Tweets migrados de Kaggle. Utiliza el modelo local para procesar o actualizar la predicción persistente.</p>
+                
+                <div class="table-container">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>ID Tweet</th>
+                                <th>Entidad</th>
+                                <th>Sentimiento Real (Kaggle)</th>
+                                <th>Texto del Tweet</th>
+                                <th>Predicción IA (MySQL)</th>
+                                <th>Acción</th>
+                            </tr>
+                        </thead>
+                        <tbody id="tabla-tweets">
+                        </tbody>
+                    </table>
+                </div>
+            </div>
 
-    resultados = []
-    for _, row in df.iterrows():
-        tweet_text = str(row['Tweet'])[:512]
-        pred = clasificador(tweet_text)[0]
-        resultados.append({
-            "entity":  str(row['Entity']),
-            "real":    str(row['Sentiment']),
-            "pred":    pred['label'],
-            "confidence": round(pred['score'], 4),
-            "tweet":   str(row['Tweet'])[:200]
-        })
-    return resultados
+            <script>
+                async function cargarTweets() {
+                    const response = await fetch('/tweets');
+                    if (response.status === 401) {
+                        window.location.href = '/login';
+                        return;
+                    }
+                    const tweets = await response.json();
+                    const tbody = document.getElementById('tabla-tweets');
+                    tbody.innerHTML = '';
+                    
+                    tweets.forEach(t => {
+                        tbody.innerHTML += `
+                            <tr>
+                                <td>${t.id_tweet}</td>
+                                <td>${t.entity}</td>
+                                <td><strong>${t.sentiment_real}</strong></td>
+                                <td>${t.tweet_text}</td>
+                                <td id="pred-${t.id_tweet}">${t.sentiment_prediction ? t.sentiment_prediction : '<i>Sin procesar</i>'}</td>
+                                <td><button onclick="procesarTweet(${t.id_tweet})">Analizar con LLM</button></td>
+                            </tr>
+                        `;
+                    });
+                }
+
+                async function procesarTweet(id) {
+                    const tdPred = document.getElementById(`pred-${id}`);
+                    tdPred.innerText = "Procesando...";
+                    
+                    const response = await fetch('/predict-db', {
+                        method: 'POST',
+                        headers: {'Content-Type': 'application/json'},
+                        body: JSON.stringify({id_tweet: id})
+                    });
+                    
+                    if (response.status === 401) {
+                        window.location.href = '/login';
+                        return;
+                    }
+                    
+                    const data = await response.json();
+                    if(response.ok) {
+                        tdPred.innerHTML = `<strong>${data.sentiment_llm}</strong> (${data.confidence})`;
+                    } else {
+                        tdPred.innerText = "Error";
+                    }
+                }
+
+                async function analizarTextoEnVivo() {
+                    const text = document.getElementById('liveTextInput').value.trim();
+                    if (!text) {
+                        alert("Por favor escribe algún texto primero.");
+                        return;
+                    }
+                    
+                    const btn = document.getElementById('liveAnalyzeBtn');
+                    const box = document.getElementById('liveResultBox');
+                    const label = document.getElementById('liveResultLabel');
+                    const score = document.getElementById('liveResultScore');
+                    
+                    btn.disabled = true;
+                    btn.innerText = "Analizando...";
+                    
+                    try {
+                        const response = await fetch('/predict', {
+                            method: 'POST',
+                            headers: {'Content-Type': 'application/json'},
+                            body: JSON.stringify({text: text})
+                        });
+                        
+                        if (response.status === 401) {
+                            window.location.href = '/login';
+                            return;
+                        }
+                        
+                        const data = await response.json();
+                        
+                        if (response.ok) {
+                            box.className = "result-box active result-" + data.sentiment;
+                            label.innerText = "Sentimiento: " + data.sentiment;
+                            score.innerText = "Confianza: " + (data.confidence * 100).toFixed(2) + "%";
+                        } else {
+                            box.className = "result-box active";
+                            label.innerText = "Error en el análisis";
+                            score.innerText = "";
+                        }
+                    } catch (e) {
+                        box.className = "result-box active";
+                        label.innerText = "Error de conexión";
+                        score.innerText = "";
+                    } finally {
+                        btn.disabled = false;
+                        btn.innerText = "Analizar Sentimiento";
+                    }
+                }
+
+                // Cargar datos al iniciar la página
+                window.onload = cargarTweets;
+            </script>
+        </body>
+    </html>
+    """
