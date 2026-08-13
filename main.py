@@ -1,8 +1,8 @@
 from fastapi import FastAPI, HTTPException, Form, Response, Cookie, Depends
 from fastapi.responses import HTMLResponse, RedirectResponse
 from pydantic import BaseModel
-from transformers import pipeline
 import pymysql
+from openai import OpenAI
 
 app = FastAPI(title="API de Análisis de Sentimientos con MySQL")
 
@@ -29,9 +29,55 @@ def get_db_connection():
             cursorclass=pymysql.cursors.DictCursor
         )
 
-# Carga del modelo global en memoria
-print("Cargando modelo de Análisis de Sentimientos...")
-clasificador = pipeline("sentiment-analysis", model="distilbert-base-uncased-finetuned-sst-2-english")
+# Inicializar cliente compatible con la API de OpenAI para LM Studio
+client = OpenAI(
+    base_url="http://localhost:1234/v1",
+    api_key="lm-studio"
+)
+
+def clasificar_sentimiento_lmstudio(texto: str) -> dict:
+    """
+    Clasifica el sentimiento de un texto usando el LLM local en LM Studio.
+    Retorna un diccionario con 'label' y 'score' (confianza).
+    """
+    system_prompt = (
+        "You are an expert sentiment analysis AI. Analyze the sentiment of the user's text.\n"
+        "You MUST respond with EXACTLY ONE of these labels: Positive, Negative, Neutral, Irrelevant.\n"
+        "Do not write any introductory text, explanation, punctuation, or any other words. Just write the label."
+    )
+    
+    try:
+        response = client.chat.completions.create(
+            model="local-model", # LM Studio usa el modelo cargado
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": f"Text: {texto}"}
+            ],
+            temperature=0.0, # Temperatura 0 para mayor determinismo y consistencia
+            max_tokens=5
+        )
+        
+        raw_reply = response.choices[0].message.content.strip()
+        # Limpiar y normalizar la respuesta
+        clean_pred = raw_reply.strip('"').strip("'").strip(".").strip().lower()
+        
+        if "positive" in clean_pred:
+            label = "Positive"
+        elif "negative" in clean_pred:
+            label = "Negative"
+        elif "neutral" in clean_pred:
+            label = "Neutral"
+        elif "irrelevant" in clean_pred:
+            label = "Irrelevant"
+        else:
+            label = "Neutral"
+            
+        return {"label": label, "score": 1.0}
+    except Exception as e:
+        print(f"Error en inferencia de LM Studio: {e}")
+        # Retornar una clasificación por defecto en caso de error
+        return {"label": "Neutral", "score": 0.0}
+
 
 class PredictRequest(BaseModel):
     id_tweet: int
@@ -225,8 +271,8 @@ def analizar_y_guardar_tweet(request: PredictRequest, session_user: str = Cookie
             
             texto = row['tweet_text']
             
-            # 2. Inferencia local con el modelo
-            prediction = clasificador(texto[:512])[0]
+            # 2. Inferencia local con el modelo LM Studio
+            prediction = clasificar_sentimiento_lmstudio(texto)
             label_pred = prediction['label']
             confidence_pred = round(prediction['score'], 4)
             
@@ -255,12 +301,13 @@ def analizar_texto(request: LivePredictRequest, session_user: str = Cookie(None)
     if session_user != "admin":
         raise HTTPException(status_code=401, detail="No autorizado")
         
-    prediction = clasificador(request.text[:512])[0]
+    prediction = clasificar_sentimiento_lmstudio(request.text)
     return {
         "text": request.text,
         "sentiment": prediction['label'],
         "confidence": round(prediction['score'], 4)
     }
+
 
 @app.get("/", response_class=HTMLResponse)
 def frontend(session_user: str = Cookie(None)):
@@ -442,12 +489,12 @@ def frontend(session_user: str = Cookie(None)):
                 .result-box.active {
                     display: block;
                 }
-                .result-box.result-POSITIVE {
+                .result-box.result-POSITIVE, .result-box.result-Positive {
                     background: rgba(16, 185, 129, 0.1);
                     border-color: rgba(16, 185, 129, 0.3);
                     color: #34d399;
                 }
-                .result-box.result-NEGATIVE {
+                .result-box.result-NEGATIVE, .result-box.result-Negative {
                     background: rgba(239, 68, 68, 0.1);
                     border-color: rgba(239, 68, 68, 0.3);
                     color: #f87171;
