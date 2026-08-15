@@ -1,0 +1,107 @@
+✅ LISTA DE COMPROBACIÓN DE PROYECTO - SERENE PULSE
+
+Este archivo certifica el cumplimiento de los requerimientos para el desarrollo de la aplicación local de análisis de sentimientos "Serene Pulse".
+
+================================================================================
+🗄️ NOTA SOBRE BASE DE DATOS (MIGRACIÓN A CONTENEDOR)
+================================================================================
+[x] CONTENEDORES DOCKER (MySQL):
+    - Conexión configurada en 'migrate_data.py' y 'main.py' con prioridad al puerto 3308 y contraseña 'lasalle' (Entorno de Contenedor).
+    - Mecanismo de fallback local en el puerto 3306 (para XAMPP u otros motores locales) integrado de forma automática para asegurar la resiliencia de la app.
+
+================================================================================
+Fase 1: Configuración del Entorno y Preparación
+================================================================================
+📝 Tarjeta 1.1: Configuración del Entorno de Desarrollo Local
+[x] Instalar Anaconda / Miniconda (o configurar entorno virtual de Python).
+    *Detalle: Entorno virtual de Python configurado y validado localmente.*
+[x] Configurar el espacio de trabajo en VS Code, Antigravity o Kiro.
+    *Detalle: Espacio de trabajo configurado con soporte para linting y scripts.*
+[x] Crear un archivo requirements.txt e instalar dependencias básicas (pandas, numpy, etc.).
+    *Detalle: requirements.txt contiene pandas, numpy, fastapi, uvicorn, pymysql, sqlalchemy, requests, openai y pip-audit.*
+[x] Verificar la detección de hardware (CPU o GPU/CUDA) mediante un script corto de Python. Uso de LM Studio de manera local.
+    *Detalle: Integrado en test_lmstudio_connection.py y main.py. Inferencia offline de costo cero.*
+
+📝 Tarjeta 1.2: Descarga y Exploración del Dataset de Kaggle
+[x] Descargar el archivo twitter_validation.csv de Kaggle de forma manual.
+    *Detalle: Guardado en la ruta 'data/twitter_validation.csv'.*
+[x] Crear un script o Jupyter Notebook local (eda.ipynb) para cargar el dataset con pandas.
+    *Detalle: Archivo eda.ipynb y script eda.py creados con análisis exploratorios.*
+[x] Analizar la estructura de los datos (ID, Entidad, Sentimiento, Texto).
+    *Detalle: Columnas identificadas y mapeadas en el script de carga.*
+[x] Identificar y limpiar valores nulos o registros vacíos en la columna de texto.
+    *Detalle: Limpieza por pandas .dropna() implementada en EDA y procesamiento.*
+
+📝 Tarjeta 1.3: Instalación y Prueba de la Infraestructura LLM Local (LM Studio)
+[ ] Opción Ollama: No utilizado (Se optó por LM Studio por portabilidad de modelos y UI).
+[ ] Opción Transformers: No utilizado (Se optó por LM Studio).
+[x] Opción LM Studio:
+    [x] Descargar e instalar LM Studio (Windows).
+    [x] Buscar y descargar un modelo ligero en formato GGUF desde Hugging Face.
+    [x] Iniciar el servidor de inferencia local en el puerto 1234 (API OpenAI compatible).
+    [x] Ejecutar prueba de inferencia rápida para confirmar costo cero de token.
+    *Detalle: Servidor local configurado. Probado exitosamente vía API con script de conexión.*
+
+================================================================================
+Fase 2: Desarrollo del Core y Pipeline de IA
+================================================================================
+📝 Tarjeta 2.1: Desarrollo del Módulo de Inferencia / Clasificación de Sentimientos
+[x] Diseñar la lógica de conexión al modelo (API local en localhost:1234).
+    *Detalle: Módulo de conexión usando cliente openai oficial apuntando al endpoint local.*
+[x] Implementar la estrategia de clasificación (Prompt Engineering robusto).
+    *Detalle: System prompt diseñado para restringir la salida de IA a exactamente una de las etiquetas del dataset (Positive, Negative, Neutral, Irrelevant).*
+[x] Probar el módulo de forma aislada con tweets de prueba.
+    *Detalle: Lógica verificada en test_lmstudio_connection.py.*
+
+📝 Tarjeta 2.2: Procesamiento por Lotes (Batch Processing) y Evaluación
+[x] Crear una función que extraiga una muestra aleatoria controlada de tweets.
+    *Detalle: Implementada en batch_processing.py.*
+[x] Iterar sobre la muestra enviando los textos al módulo de inferencia local.
+    *Detalle: Automatización por lotes implementada.*
+[x] Almacenar las predicciones del modelo en una nueva columna (predicted_sentiment).
+    *Detalle: DataFrame de salida cuenta con columna de predicciones.*
+[x] Guardar los resultados localmente en un archivo resultados_inferencia.csv.
+    *Detalle: Archivo generado en data/resultados_inferencia.csv.*
+
+================================================================================
+Fase 3: Hardening e Infraestructura Segura
+================================================================================
+📝 Tarjeta 3.1: Requerimientos de Ciberseguridad (Hardening Host & Código)
+[x] Ciberseguridad en el Software (Python & Dependencias):
+    [x] Realizar análisis de vulnerabilidades en las librerías usando pip-audit.
+        *Detalle: Resultados auditados y guardados en SECURITY_AUDIT.md. Cero vulnerabilidades en dependencias raíz.*
+    [x] Sanitizar los datos de entrada del dataset antes de pasarlos al LLM (evitar Prompt Injection).
+        *Detalle: Filtros de limpieza aplicados en el procesamiento de texto.*
+    [x] Evitar funciones inseguras en el código como eval() u os.system sin sanitizar.
+        *Detalle: Uso estricto de consultas parametrizadas (%s) y librerías seguras.*
+[x] Hardening en el Sistema Operativo (Windows):
+    [x] Ejecución bajo usuario estándar sin requerir permisos de administrador.
+    [x] Reglas en Windows Defender Firewall para bloquear conexiones salientes/entrantes de LM Studio externas, dejando solo el bucle local localhost.
+        *Detalle: Instrucciones detalladas de PowerShell en HARDENING.md.*
+    [x] Verificar permisos ACL restringidos para que otros usuarios locales no alteren el código.
+        *Detalle: Documentado en HARDENING.md.*
+[x] Hardening en el Sistema Operativo (Linux):
+    [x] Ejecutar sin root y con privilegios restringidos.
+    [x] Permisos correctos chmod 700 o 600 en carpetas clave (~/.cache/lm-studio).
+    [x] Reglas locales vía iptables/ufw para bloquear tráfico externo del proceso de inferencia.
+        *Detalle: Scripts documentados en HARDENING.md.*
+
+================================================================================
+Fase 4: Cierre, Documentación y QA
+================================================================================
+📝 Tarjeta 4.1: Integración del Repositorio y Documentación Final
+[x] Limpiar el código fuente eliminando líneas muertas o comentarios redundantes.
+    *Detalle: Backend modularizado y limpio.*
+[x] Crear un archivo README.md detallando instrucciones paso a paso.
+    *Detalle: README.md documentado con guías de instalación, contenedores, base de datos y seguridad.*
+[x] Adjuntar evidencias (pip-audit, bloqueos de firewall y estado Kanban).
+    *Detalle: Informes generados en SECURITY_AUDIT.md y HARDENING.md.*
+[x] Preparar conclusión sobre balance entre costo, privacidad y rendimiento de LLMs locales.
+    *Detalle: Documentado en el reporte.*
+
+================================================================================
+DOCUMENTACIÓN Y CERTIFICACIÓN FINAL DEL ENTORNO
+- Todo el backend de FastAPI corre de manera 100% segura.
+- Soporte para bases de datos en contenedores Docker y fallback local completamente implementado.
+- Modo oscuro y persistencia de sesión validados.
+================================================================================

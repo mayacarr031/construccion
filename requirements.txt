@@ -7,3 +7,4 @@ numpy
 requests
 openai
 pip-audit
+python-multipart

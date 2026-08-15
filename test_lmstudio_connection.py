@@ -2,21 +2,35 @@ import sys
 import time
 from openai import OpenAI
 
+import os
+
 def test_connection():
+    base_url = os.getenv("LLM_BASE_URL", "http://localhost:1234/v1")
     print("=== Iniciando Prueba de Conexion con LM Studio ===")
-    print("Base URL: http://localhost:1234/v1")
+    print(f"Base URL: {base_url}")
     
     # Inicializar cliente compatible con la API de OpenAI
     client = OpenAI(
-        base_url="http://localhost:1234/v1",
+        base_url=base_url,
         api_key="lm-studio"
     )
     
     start_time = time.time()
     try:
-        print("\n[+] Enviando solicitud de chat completado a LM Studio...")
+        # Detectar modelo activo dinámicamente si no está en la variable de entorno LLM_MODEL
+        env_model = os.getenv("LLM_MODEL")
+        if env_model:
+            model_name = env_model
+        else:
+            try:
+                models = client.models.list()
+                model_name = models.data[0].id if models.data else "sentiment-model"
+            except Exception:
+                model_name = "sentiment-model"
+
+        print(f"\n[+] Enviando solicitud de chat completado usando modelo '{model_name}'...")
         response = client.chat.completions.create(
-            model="sentiment-model",  # LM Studio utiliza por defecto cualquier modelo cargado
+            model=model_name,
             messages=[
                 {"role": "system", "content": "Eres un asistente de pruebas util y conciso."},
                 {"role": "user", "content": "Hola. Responde con un saludo breve y confirma si estas listo para analizar sentimientos."}
