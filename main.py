@@ -9,6 +9,13 @@ from openai import OpenAI
 
 app = FastAPI(title="API de Análisis de Sentimientos con MySQL")
 
+
+@app.get("/health")
+def health_check():
+    """Endpoint de salud para Docker healthcheck y monitoreo."""
+    return {"status": "ok", "service": "construccion-fastapi"}
+
+
 # Ruta del archivo JSON de usuarios locales
 USERS_JSON_PATH = "usuarios.json"
 
@@ -44,8 +51,8 @@ init_users_file()
 # Configuración de conexión a MySQL con soporte de variables de entorno y fallbacks automáticos
 def get_db_connection():
     import os
-    
-    # Si se definen variables de entorno, priorizamos esa conexión directa (útil para contenedores remotos)
+
+    # 1. Variables de entorno tienen máxima prioridad (usadas cuando corre en Docker)
     env_host = os.getenv("DB_HOST")
     if env_host:
         env_port = int(os.getenv("DB_PORT", 3306))
@@ -63,23 +70,22 @@ def get_db_connection():
             )
         except Exception as e:
             print(f"Error al conectar con variables de entorno a {env_host}:{env_port}: {e}")
-            # Continuamos con los fallbacks locales
-            
-    # Intentar conexión local con los parámetros del entorno de desarrollo local (puerto 3308 y contraseña 'lasalle')
+
+    # 2. Fallback principal: XAMPP local (puerto 3306, sin contraseña)
     try:
         return pymysql.connect(
-            host='localhost',
-            port=3308,
+            host='127.0.0.1',
+            port=3306,
             user='root',
-            password='lasalle',
+            password='',
             database='db_sentimientos',
             cursorclass=pymysql.cursors.DictCursor
         )
     except Exception:
         try:
-            # Fallback a los parámetros predeterminados de la tarea escolar (puerto 3306 y contraseña 'password')
+            # 3. Fallback secundario (contraseña 'password')
             return pymysql.connect(
-                host='localhost',
+                host='127.0.0.1',
                 port=3306,
                 user='root',
                 password='password',
@@ -87,20 +93,22 @@ def get_db_connection():
                 cursorclass=pymysql.cursors.DictCursor
             )
         except Exception:
-            # Fallback para XAMPP local por defecto (puerto 3306 y contraseña vacía)
+            # 4. Fallback legado (puerto 3308, contraseña 'lasalle')
             return pymysql.connect(
-                host='localhost',
-                port=3306,
+                host='127.0.0.1',
+                port=3308,
                 user='root',
-                password='',
+                password='lasalle',
                 database='db_sentimientos',
                 cursorclass=pymysql.cursors.DictCursor
             )
 
 
-# Inicializar cliente compatible con la API de OpenAI para LM Studio (soporta variable de entorno LLM_BASE_URL)
+# Inicializar cliente compatible con la API de OpenAI para LM Studio
+# En Docker usa LLM_BASE_URL=http://host.docker.internal:1234/v1
+# En local usa http://127.0.0.1:1234/v1 como fallback
 client = OpenAI(
-    base_url=os.getenv("LLM_BASE_URL", "http://localhost:1234/v1"),
+    base_url=os.getenv("LLM_BASE_URL", "http://127.0.0.1:1234/v1"),
     api_key="lm-studio"
 )
 

@@ -4,12 +4,12 @@ import pymysql
 
 # Lista de credenciales a probar en orden
 DB_CONFIGS = [
-    # 1. Entorno Docker (Puerto 3308, clave lasalle)
-    {"host": "localhost", "port": 3308, "user": "root", "password": "lasalle"},
-    # 2. XAMPP por defecto (Puerto 3306, sin clave)
-    {"host": "localhost", "port": 3306, "user": "root", "password": ""},
-    # 3. Tarea escolar estándar (Puerto 3306, clave password)
-    {"host": "localhost", "port": 3306, "user": "root", "password": "password"}
+    # 1. XAMPP por defecto (Puerto 3306, sin clave) — configuración principal
+    {"host": "127.0.0.1", "port": 3306, "user": "root", "password": ""},
+    # 2. Tarea escolar estándar (Puerto 3306, clave password)
+    {"host": "127.0.0.1", "port": 3306, "user": "root", "password": "password"},
+    # 3. Entorno legado (Puerto 3308, clave lasalle)
+    {"host": "127.0.0.1", "port": 3308, "user": "root", "password": "lasalle"},
 ]
 DB_NAME = os.getenv("DB_NAME", 'db_sentimientos')
 CSV_PATH = os.path.join("data", "twitter_validation.csv")

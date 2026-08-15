@@ -1,0 +1,25 @@
+# ── docker-compose.yml ────────────────────────────────────
+# Levanta FastAPI en Docker conectado a XAMPP MySQL + LM Studio
+# que corren en el host Windows (no en Docker)
+# ──────────────────────────────────────────────────────────
+version: "3.9"
+
+services:
+  fastapi:
+    build: .
+    image: construccion-fastapi:latest
+    container_name: construccion_fastapi
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env
+    # Permite resolver host.docker.internal en Linux Docker Desktop
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s

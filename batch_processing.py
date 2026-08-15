@@ -40,17 +40,19 @@ OUTPUT_PATH = "resultados_inferencia.csv"
 SAMPLE_SIZE = 5
 RANDOM_SEED = 42
 
-FASTAPI_URL = "http://127.0.0.1:8000"
+FASTAPI_URL = os.getenv("FASTAPI_URL", "http://127.0.0.1:8000")
 
 # Configuracion actual de tu proyecto
-FASTAPI_USER = "admin"
-FASTAPI_PASSWORD = "12345"
+FASTAPI_USER = os.getenv("FASTAPI_USER", "admin")
+FASTAPI_PASSWORD = os.getenv("FASTAPI_PASSWORD", "12345")
 
-MYSQL_HOST = "127.0.0.1"
-MYSQL_PORT = 3308
-MYSQL_USER = "root"
-MYSQL_PASSWORD = "lasalle"
-MYSQL_DATABASE = "db_sentimientos"
+# MySQL: XAMPP local (puerto 3306, sin contraseña)
+# Configurable vía variables de entorno para otros entornos
+MYSQL_HOST = os.getenv("DB_HOST", "127.0.0.1")
+MYSQL_PORT = int(os.getenv("DB_PORT", 3306))
+MYSQL_USER = os.getenv("DB_USER", "root")
+MYSQL_PASSWORD = os.getenv("DB_PASSWORD", "")
+MYSQL_DATABASE = os.getenv("DB_NAME", "db_sentimientos")
 
 
 # =========================================================
