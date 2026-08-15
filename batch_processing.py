@@ -1,202 +1,694 @@
 """
-Script de Procesamiento por Lotes (Batch Processing)
-1) Carga una muestra de 50 tweets del dataset limpio.
-2) Sanitiza el texto con sanitizar_texto() eliminando caracteres extraños e intentos de Prompt Injection.
-3) Envía las solicitudes al endpoint /predict / /predict-db de FastAPI o al servidor local de inferencia.
-4) Guarda los resultados en resultados_inferencia.csv.
+Batch Processing - Analisis de Sentimientos con FastAPI + LM Studio + MySQL
+
+Flujo:
+1. Carga una muestra reproducible del dataset de Kaggle.
+2. Limpia y sanitiza el texto.
+3. Se autentica en FastAPI.
+4. Envia el texto sanitizado al endpoint /predict.
+5. FastAPI envia el texto a LM Studio.
+6. LM Studio/Qwen devuelve:
+   Positive, Negative, Neutral o Irrelevant.
+7. La prediccion se guarda en MySQL.
+8. Los resultados se guardan en resultados_inferencia.csv.
+
+IMPORTANTE:
+- No existe fallback por palabras.
+- Si LM Studio/FastAPI falla, se registra el error.
+- No se inventa un valor de "confianza".
 """
 
 import os
-import sys
-import time
 import re
+import time
 import unicodedata
-import requests
-import pandas as pd
 
+import pandas as pd
+import pymysql
+import requests
+
+
+# =========================================================
+# CONFIGURACION
+# =========================================================
+
+CSV_PATH = "data/twitter_validation.csv"
+OUTPUT_PATH = "resultados_inferencia.csv"
+
+# Empezamos con 5.
+# Cuando confirmemos que funciona, cambiaremos a 100.
+SAMPLE_SIZE = 5
+RANDOM_SEED = 42
+
+FASTAPI_URL = "http://127.0.0.1:8000"
+
+# Configuracion actual de tu proyecto
+FASTAPI_USER = "admin"
+FASTAPI_PASSWORD = "12345"
+
+MYSQL_HOST = "127.0.0.1"
+MYSQL_PORT = 3308
+MYSQL_USER = "root"
+MYSQL_PASSWORD = "lasalle"
+MYSQL_DATABASE = "db_sentimientos"
+
+
+# =========================================================
+# SANITIZACION
+# =========================================================
 
 def sanitizar_texto(texto: str) -> str:
     """
-    Limpia caracteres extraños, caracteres de control no imprimibles
-    y mitiga posibles intentos de Prompt Injection en el texto del tweet.
-    
-    Args:
-        texto (str): Texto original del tweet.
-        
-    Returns:
-        str: Texto sanitizado y seguro para el LLM / modelo de inferencia.
+    Limpia el texto antes de enviarlo al LLM.
+
+    Medidas:
+    - Elimina etiquetas HTML.
+    - Elimina delimitadores especiales de modelos.
+    - Neutraliza patrones comunes de Prompt Injection.
+    - Elimina caracteres de control.
+    - Normaliza espacios.
+    - Limita la longitud.
     """
+
     if not isinstance(texto, str):
         return ""
-        
-    # 1. Eliminar etiquetas HTML y delimitadores especiales de instruct/prompt
-    texto = re.sub(r'<[^>]+>', ' ', texto)
-    texto = re.sub(r'\[\/?INST\]', ' ', texto, flags=re.IGNORECASE)
-    texto = re.sub(r'<\|im_start\|>|<\|im_end\|>', ' ', texto)
-    
-    # 2. Neutralizar patrones comunes de Prompt Injection (case-insensitive)
+
+    # Eliminar etiquetas HTML
+    texto = re.sub(r"<[^>]+>", " ", texto)
+
+    # Eliminar delimitadores especiales comunes
+    texto = re.sub(
+        r"\[\/?INST\]",
+        " ",
+        texto,
+        flags=re.IGNORECASE
+    )
+
+    texto = re.sub(
+        r"<\|im_start\|>|<\|im_end\|>",
+        " ",
+        texto,
+        flags=re.IGNORECASE
+    )
+
+    # Patrones comunes de Prompt Injection
     patrones_injection = [
-        r'ignore\s+previous\s+instructions',
-        r'ignore\s+all\s+instructions',
-        r'disregard\s+all\s+previous',
-        r'system\s*:',
-        r'user\s*:',
-        r'assistant\s*:',
-        r'you\s+are\s+now',
-        r'forget\s+(your\s+)?role',
-        r'override\s+(the\s+)?prompt'
+        r"ignore\s+previous\s+instructions",
+        r"ignore\s+all\s+instructions",
+        r"disregard\s+all\s+previous",
+        r"system\s*:",
+        r"user\s*:",
+        r"assistant\s*:",
+        r"you\s+are\s+now",
+        r"forget\s+(your\s+)?role",
+        r"override\s+(the\s+)?prompt",
     ]
+
     for patron in patrones_injection:
-        texto = re.sub(patron, '[TEXTO_FILTRADO]', texto, flags=re.IGNORECASE)
-        
-    # 3. Remover caracteres de control ASCII/Unicode no imprimibles
-    texto = "".join(ch for ch in texto if unicodedata.category(ch)[0] != "C" or ch in ("\n", "\t"))
-    
-    # 4. Normalizar espacios en blanco consecutivos y extremos
-    texto = re.sub(r'\s+', ' ', texto).strip()
-    
+        texto = re.sub(
+            patron,
+            "[TEXTO_FILTRADO]",
+            texto,
+            flags=re.IGNORECASE
+        )
+
+    # Eliminar caracteres de control
+    texto = "".join(
+        ch
+        for ch in texto
+        if unicodedata.category(ch)[0] != "C"
+        or ch in ("\n", "\t")
+    )
+
+    # Normalizar espacios
+    texto = re.sub(r"\s+", " ", texto).strip()
+
+    # Limitar longitud enviada al modelo
+    texto = texto[:1500]
+
     return texto
 
 
-def cargar_muestra_limpia(csv_path="data/twitter_validation.csv", sample_size=50, seed=42):
+# =========================================================
+# CARGA DEL DATASET
+# =========================================================
+
+def cargar_muestra_limpia(
+    csv_path=CSV_PATH,
+    sample_size=SAMPLE_SIZE,
+    seed=RANDOM_SEED
+):
     """
-    Carga el dataset, elimina filas con valores nulos en la columna 'Tweet' y obtiene una muestra aleatoria.
-    
-    Args:
-        csv_path (str): Ruta al archivo CSV.
-        sample_size (int): Cantidad de muestras a extraer (default: 50).
-        seed (int): Semilla aleatoria para reproducibilidad.
-        
-    Returns:
-        pd.DataFrame: Muestra de tweets limpios.
+    Carga twitter_validation.csv,
+    elimina textos nulos/vacios y toma una muestra reproducible.
     """
+
     if not os.path.exists(csv_path):
-        raise FileNotFoundError(f"No se encontró el archivo dataset en {csv_path}")
-        
-    columnas = ['ID', 'Entity', 'Sentiment', 'Tweet']
-    df = pd.read_csv(csv_path, names=columnas)
-    
-    # Limpieza de valores nulos en la columna de texto 'Tweet'
-    df_clean = df.dropna(subset=['Tweet']).copy()
-    
-    # Extracción de la muestra de 50 tweets
-    df_sample = df_clean.sample(n=min(sample_size, len(df_clean)), random_state=seed).copy()
-    return df_sample
+        raise FileNotFoundError(
+            f"No se encontro el dataset en: {csv_path}"
+        )
+
+    columnas = [
+        "ID",
+        "Entity",
+        "Sentiment",
+        "Tweet"
+    ]
+
+    df = pd.read_csv(
+        csv_path,
+        names=columnas,
+        header=None,
+        encoding="utf-8",
+        on_bad_lines="skip"
+    )
+
+    # Eliminar valores nulos
+    df = df.dropna(subset=["Tweet"]).copy()
+
+    # Convertir texto a string y limpiar espacios
+    df["Tweet"] = df["Tweet"].astype(str).str.strip()
+
+    # Eliminar tweets vacios
+    df = df[df["Tweet"] != ""].copy()
+
+    # Asegurar ID numerico
+    df["ID"] = pd.to_numeric(
+        df["ID"],
+        errors="coerce"
+    )
+
+    df = df.dropna(subset=["ID"]).copy()
+    df["ID"] = df["ID"].astype(int)
+
+    # Muestra reproducible
+    n = min(sample_size, len(df))
+
+    muestra = df.sample(
+        n=n,
+        random_state=seed
+    ).copy()
+
+    return muestra
 
 
-def predecir_con_fastapi_o_local(texto_sanitizado, id_tweet=None, api_session=None, api_url="http://localhost:8000"):
+# =========================================================
+# FASTAPI
+# =========================================================
+
+def crear_sesion_fastapi():
     """
-    Envía el texto al endpoint /predict o /predict-db de FastAPI.
-    Si el servidor FastAPI no está en ejecución, utiliza un motor local de inferencia de respaldo.
+    Inicia sesion en FastAPI y conserva la cookie.
     """
-    # 1. Intentar endpoint /predict de FastAPI si hay una sesión HTTP disponible
-    if api_session and api_url:
-        try:
-            resp = api_session.post(f"{api_url}/predict", json={"text": texto_sanitizado}, timeout=1)
-            if resp.status_code == 200:
-                data = resp.json()
-                return data.get("sentiment", "Neutral"), round(float(data.get("confidence", 1.0)), 4)
-        except Exception:
-            pass
 
-    # 2. Fallback a análisis rápido basado en léxico/reglas cuando no hay servidor activo
-    texto_lower = texto_sanitizado.lower()
-    
-    palabras_positivas = {'good', 'great', 'awesome', 'love', 'happy', 'best', 'excellent', 'amazing', 'nice', 'win', 'win!'}
-    palabras_negativas = {'bad', 'worst', 'hate', 'terrible', 'awful', 'poor', 'sad', 'angry', 'sucks', 'fail', 'fix'}
-    palabras_irrelevantes = {'http', 'www', 'com', 'pic.twitter', 'news', 'link'}
-
-    score_pos = sum(1 for word in palabras_positivas if word in texto_lower)
-    score_neg = sum(1 for word in palabras_negativas if word in texto_lower)
-    score_irr = sum(1 for word in palabras_irrelevantes if word in texto_lower)
-
-    if score_pos > score_neg and score_pos > score_irr:
-        return "Positive", 0.95
-    elif score_neg > score_pos and score_neg > score_irr:
-        return "Negative", 0.95
-    elif score_irr > score_pos and score_irr > score_neg:
-        return "Irrelevant", 0.85
-    else:
-        return "Neutral", 0.80
-
-
-def ejecutar_batch_processing(csv_path="data/twitter_validation.csv", output_path="resultados_inferencia.csv", sample_size=50):
-    """
-    Ejecuta el flujo completo de Batch Processing de 50 tweets.
-    """
-    print("=== Iniciando Batch Processing (50 Tweets) ===", flush=True)
-    
-    # Step 1: Cargar muestra de 50 tweets del dataset limpio
-    print(f"[1/4] Cargando muestra de {sample_size} tweets del dataset limpio...", flush=True)
-    df_sample = cargar_muestra_limpia(csv_path=csv_path, sample_size=sample_size)
-    print(f"      - Muestra cargada correctamente: {len(df_sample)} filas.", flush=True)
-    
-    # Comprobar si FastAPI está corriendo localmente
-    api_url = "http://localhost:8000"
     session = requests.Session()
-    api_activa = False
-    try:
-        login_resp = session.post(f"{api_url}/login", data={"username": "admin", "password": "12345"}, timeout=1)
-        if login_resp.status_code in [200, 303]:
-            api_activa = True
-            print(f"[+] Conexión autenticada con servidor FastAPI en {api_url}", flush=True)
-    except Exception:
-        print("[!] Servidor FastAPI en http://localhost:8000 no disponible. Se utilizará inferencia local de respaldo.", flush=True)
 
-    # Step 2 & 3: Sanitización e Inferencia
-    print(f"[2/4 & 3/4] Aplicando sanitizar_texto() y procesando inferencias...", flush=True)
+    try:
+        response = session.post(
+            f"{FASTAPI_URL}/login",
+            data={
+                "username": FASTAPI_USER,
+                "password": FASTAPI_PASSWORD
+            },
+            timeout=10,
+            allow_redirects=False
+        )
+
+        if response.status_code not in (200, 303):
+            raise RuntimeError(
+                f"Login FastAPI fallo. "
+                f"HTTP {response.status_code}"
+            )
+
+        print(
+            f"[OK] Autenticacion FastAPI correcta: {FASTAPI_URL}"
+        )
+
+        return session
+
+    except requests.RequestException as error:
+        raise RuntimeError(
+            f"No fue posible conectar con FastAPI: {error}"
+        )
+
+
+def predecir_con_fastapi(
+    texto_sanitizado: str,
+    session: requests.Session
+):
+    """
+    Envia texto sanitizado a FastAPI.
+
+    FastAPI se comunica con LM Studio
+    mediante el endpoint /predict.
+    """
+
+    response = session.post(
+        f"{FASTAPI_URL}/predict",
+        json={
+            "text": texto_sanitizado
+        },
+        timeout=120
+    )
+
+    response.raise_for_status()
+
+    data = response.json()
+
+    sentimiento = data.get("sentiment")
+
+    etiquetas_validas = {
+        "Positive",
+        "Negative",
+        "Neutral",
+        "Irrelevant"
+    }
+
+    if sentimiento not in etiquetas_validas:
+        raise ValueError(
+            f"FastAPI devolvio una etiqueta invalida: "
+            f"{sentimiento}"
+        )
+
+    return sentimiento
+
+
+# =========================================================
+# MYSQL
+# =========================================================
+
+def conectar_mysql():
+    """
+    Conexion con MySQL ejecutandose en Docker.
+    """
+
+    return pymysql.connect(
+        host=MYSQL_HOST,
+        port=MYSQL_PORT,
+        user=MYSQL_USER,
+        password=MYSQL_PASSWORD,
+        database=MYSQL_DATABASE,
+        cursorclass=pymysql.cursors.DictCursor,
+        autocommit=False
+    )
+
+
+def guardar_prediccion_mysql(
+    connection,
+    id_tweet: int,
+    sentimiento: str
+):
+    """
+    Guarda la prediccion generada por LM Studio en MySQL.
+
+    No guarda una confianza falsa.
+    La columna confidence queda NULL.
+    """
+
+    sql = """
+        UPDATE tweets
+        SET
+            sentiment_prediction = %s,
+            confidence = NULL
+        WHERE id_tweet = %s
+    """
+
+    with connection.cursor() as cursor:
+
+        cursor.execute(
+            sql,
+            (
+                sentimiento,
+                int(id_tweet)
+            )
+        )
+
+    connection.commit()
+
+
+# =========================================================
+# BATCH PROCESSING
+# =========================================================
+
+def ejecutar_batch_processing(
+    csv_path=CSV_PATH,
+    output_path=OUTPUT_PATH,
+    sample_size=SAMPLE_SIZE
+):
+    """
+    Ejecuta el Batch Processing completo.
+    """
+
+    print()
+    print("=" * 65)
+    print(" BATCH PROCESSING - FASTAPI + LM STUDIO + MYSQL")
+    print("=" * 65)
+
+    # -----------------------------------------------------
+    # 1. Dataset
+    # -----------------------------------------------------
+
+    print(
+        f"\n[1/5] Cargando muestra de "
+        f"{sample_size} tweets..."
+    )
+
+    df_sample = cargar_muestra_limpia(
+        csv_path=csv_path,
+        sample_size=sample_size
+    )
+
+    print(
+        f"[OK] Tweets cargados: "
+        f"{len(df_sample)}"
+    )
+
+    # -----------------------------------------------------
+    # 2. FastAPI
+    # -----------------------------------------------------
+
+    print(
+        "\n[2/5] Conectando con FastAPI..."
+    )
+
+    session = crear_sesion_fastapi()
+
+    # -----------------------------------------------------
+    # 3. MySQL
+    # -----------------------------------------------------
+
+    print(
+        "\n[3/5] Conectando con MySQL..."
+    )
+
+    connection = conectar_mysql()
+
+    print(
+        f"[OK] MySQL conectado en "
+        f"{MYSQL_HOST}:{MYSQL_PORT}"
+    )
+
+    # -----------------------------------------------------
+    # Listas de resultados
+    # -----------------------------------------------------
+
     textos_sanitizados = []
     predicciones = []
-    confianzas = []
-    
-    start_time = time.time()
-    for idx, (row_id, row) in enumerate(df_sample.iterrows(), 1):
-        original_text = row['Tweet']
-        
-        # 2) Función sanitizar_texto()
-        clean_text = sanitizar_texto(original_text)
-        textos_sanitizados.append(clean_text)
-        
-        # 3) Enviar texto a /predict o /predict-db o servidor local
-        pred, conf = predecir_con_fastapi_o_local(
-            texto_sanitizado=clean_text, 
-            id_tweet=row['ID'],
-            api_session=session if api_activa else None, 
-            api_url=api_url
+    tiempos = []
+    estados = []
+    errores = []
+
+    inicio_batch = time.time()
+
+    # -----------------------------------------------------
+    # 4. Inferencias
+    # -----------------------------------------------------
+
+    print(
+        "\n[4/5] Ejecutando inferencias..."
+    )
+
+    try:
+
+        for numero, (_, row) in enumerate(
+            df_sample.iterrows(),
+            start=1
+        ):
+
+            id_tweet = int(row["ID"])
+            texto_original = row["Tweet"]
+
+            texto_sanitizado = sanitizar_texto(
+                texto_original
+            )
+
+            textos_sanitizados.append(
+                texto_sanitizado
+            )
+
+            print()
+            print(
+                f"[{numero}/{len(df_sample)}] "
+                f"Tweet ID {id_tweet}"
+            )
+
+            inicio_inferencia = time.time()
+
+            try:
+
+                # -----------------------------------------
+                # FastAPI -> LM Studio
+                # -----------------------------------------
+
+                prediccion = predecir_con_fastapi(
+                    texto_sanitizado,
+                    session
+                )
+
+                duracion = (
+                    time.time()
+                    - inicio_inferencia
+                )
+
+                # -----------------------------------------
+                # Persistencia MySQL
+                # -----------------------------------------
+
+                guardar_prediccion_mysql(
+                    connection,
+                    id_tweet,
+                    prediccion
+                )
+
+                predicciones.append(
+                    prediccion
+                )
+
+                tiempos.append(
+                    round(duracion, 2)
+                )
+
+                estados.append(
+                    "OK"
+                )
+
+                errores.append(
+                    ""
+                )
+
+                print(
+                    f"    Real       : "
+                    f"{row['Sentiment']}"
+                )
+
+                print(
+                    f"    Prediccion : "
+                    f"{prediccion}"
+                )
+
+                print(
+                    f"    Tiempo     : "
+                    f"{duracion:.2f} s"
+                )
+
+                print(
+                    "    MySQL       : "
+                    "actualizado"
+                )
+
+            except Exception as error:
+
+                duracion = (
+                    time.time()
+                    - inicio_inferencia
+                )
+
+                predicciones.append(
+                    "ERROR"
+                )
+
+                tiempos.append(
+                    round(duracion, 2)
+                )
+
+                estados.append(
+                    "ERROR"
+                )
+
+                errores.append(
+                    str(error)
+                )
+
+                print(
+                    f"    [ERROR] {error}"
+                )
+
+    finally:
+
+        connection.close()
+
+    # -----------------------------------------------------
+    # Agregar resultados al DataFrame
+    # -----------------------------------------------------
+
+    df_sample[
+        "Tweet_Sanitizado"
+    ] = textos_sanitizados
+
+    df_sample[
+        "predicted_sentiment"
+    ] = predicciones
+
+    df_sample[
+        "inference_time_seconds"
+    ] = tiempos
+
+    df_sample[
+        "status"
+    ] = estados
+
+    df_sample[
+        "error"
+    ] = errores
+
+    # -----------------------------------------------------
+    # 5. Guardar CSV
+    # -----------------------------------------------------
+
+    print(
+        f"\n[5/5] Guardando resultados en "
+        f"{output_path}..."
+    )
+
+    df_sample.to_csv(
+        output_path,
+        index=False,
+        encoding="utf-8-sig"
+    )
+
+    # Copia adicional dentro de data/
+    if os.path.isdir("data"):
+
+        df_sample.to_csv(
+            "data/resultados_inferencia.csv",
+            index=False,
+            encoding="utf-8-sig"
         )
-        predicciones.append(pred)
-        confianzas.append(conf)
-        
-        if idx % 10 == 0 or idx == sample_size:
-            print(f"      - Procesados {idx}/{sample_size} tweets...", flush=True)
-            
-    total_time = time.time() - start_time
-    
-    # Agregar columnas resultantes
-    df_sample['Tweet_Sanitizado'] = textos_sanitizados
-    df_sample['Sentiment_Prediction'] = predicciones
-    df_sample['Confidence'] = confianzas
-    
-    # Step 4: Guardar los resultados en resultados_inferencia.csv
-    print(f"[4/4] Guardando resultados en {output_path}...", flush=True)
-    df_sample.to_csv(output_path, index=False)
-    
-    # También guardar una copia en data/resultados_inferencia.csv si existe la carpeta data
-    if os.path.exists("data"):
-        df_sample.to_csv("data/resultados_inferencia.csv", index=False)
-        
-    print("\n" + "=" * 60, flush=True)
-    print("           RESUMEN DE BATCH PROCESSING", flush=True)
-    print("=" * 60, flush=True)
-    print(f" Total procesados     : {len(df_sample)} tweets", flush=True)
-    print(f" Tiempo total         : {total_time:.2f} segundos", flush=True)
-    print(f" Archivo generado     : {output_path}", flush=True)
-    print("=" * 60, flush=True)
-    print("\nMuestra de Resultados (Primeros 5 registros):", flush=True)
-    print(df_sample[['ID', 'Sentiment', 'Sentiment_Prediction', 'Confidence', 'Tweet_Sanitizado']].head(5).to_string(), flush=True)
-    
+
+    tiempo_total = (
+        time.time()
+        - inicio_batch
+    )
+
+    # =====================================================
+    # EVALUACION BASICA
+    # =====================================================
+
+    exitosos = df_sample[
+        df_sample["status"] == "OK"
+    ].copy()
+
+    if not exitosos.empty:
+
+        correctos = (
+            exitosos["Sentiment"]
+            == exitosos["predicted_sentiment"]
+        ).sum()
+
+        accuracy = (
+            correctos
+            / len(exitosos)
+        )
+
+    else:
+
+        correctos = 0
+        accuracy = 0.0
+
+    # =====================================================
+    # RESUMEN
+    # =====================================================
+
+    print()
+    print("=" * 65)
+    print(" RESUMEN DEL BATCH")
+    print("=" * 65)
+
+    print(
+        f"Tweets seleccionados : "
+        f"{len(df_sample)}"
+    )
+
+    print(
+        f"Inferencias exitosas : "
+        f"{len(exitosos)}"
+    )
+
+    print(
+        f"Errores              : "
+        f"{len(df_sample) - len(exitosos)}"
+    )
+
+    print(
+        f"Predicciones correctas: "
+        f"{correctos}"
+    )
+
+    print(
+        f"Accuracy             : "
+        f"{accuracy * 100:.2f}%"
+    )
+
+    print(
+        f"Tiempo total         : "
+        f"{tiempo_total:.2f} segundos"
+    )
+
+    if len(exitosos) > 0:
+
+        print(
+            f"Tiempo promedio      : "
+            f"{exitosos['inference_time_seconds'].mean():.2f} "
+            f"segundos/tweet"
+        )
+
+    print(
+        f"Archivo generado     : "
+        f"{output_path}"
+    )
+
+    print("=" * 65)
+
+    # Mostrar resultados
+    print()
+    print("RESULTADOS:")
+    print()
+
+    columnas_resumen = [
+        "ID",
+        "Sentiment",
+        "predicted_sentiment",
+        "inference_time_seconds",
+        "status"
+    ]
+
+    print(
+        df_sample[
+            columnas_resumen
+        ].to_string(
+            index=False
+        )
+    )
+
+    print()
+
     return df_sample
 
 
+# =========================================================
+# MAIN
+# =========================================================
+
 if __name__ == "__main__":
+
     ejecutar_batch_processing()

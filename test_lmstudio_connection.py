@@ -16,7 +16,7 @@ def test_connection():
     try:
         print("\n[+] Enviando solicitud de chat completado a LM Studio...")
         response = client.chat.completions.create(
-            model="local-model",  # LM Studio utiliza por defecto cualquier modelo cargado
+            model="sentiment-model",  # LM Studio utiliza por defecto cualquier modelo cargado
             messages=[
                 {"role": "system", "content": "Eres un asistente de pruebas util y conciso."},
                 {"role": "user", "content": "Hola. Responde con un saludo breve y confirma si estas listo para analizar sentimientos."}

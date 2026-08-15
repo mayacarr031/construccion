@@ -48,7 +48,7 @@ def clasificar_sentimiento_lmstudio(texto: str) -> dict:
     
     try:
         response = client.chat.completions.create(
-            model="local-model", # LM Studio usa el modelo cargado
+            model="sentiment-model", # LM Studio usa el modelo cargado
             messages=[
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": f"Text: {texto}"}
