@@ -23,3 +23,7 @@ Thumbs.db
 # Temp files
 *.log
 *.tmp
+
+__pycache__/
+*.pyc
+*_backup.py
