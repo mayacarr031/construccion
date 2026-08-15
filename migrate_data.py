@@ -2,24 +2,55 @@ import os
 import pandas as pd
 import pymysql
 
-# MySQL connection settings
-MYSQL_HOST = 'localhost'
-MYSQL_PORT = 3308
-MYSQL_USER = 'root'
-MYSQL_PASSWORD = 'lasalle'
-DB_NAME = 'db_sentimientos'
+# Lista de credenciales a probar en orden
+DB_CONFIGS = [
+    # 1. Entorno Docker (Puerto 3308, clave lasalle)
+    {"host": "localhost", "port": 3308, "user": "root", "password": "lasalle"},
+    # 2. XAMPP por defecto (Puerto 3306, sin clave)
+    {"host": "localhost", "port": 3306, "user": "root", "password": ""},
+    # 3. Tarea escolar estándar (Puerto 3306, clave password)
+    {"host": "localhost", "port": 3306, "user": "root", "password": "password"}
+]
+DB_NAME = os.getenv("DB_NAME", 'db_sentimientos')
 CSV_PATH = os.path.join("data", "twitter_validation.csv")
+
+def connect_with_fallbacks():
+    # Si se definen variables de entorno, priorizamos esa conexión directa (útil para contenedores remotos)
+    env_host = os.getenv("DB_HOST")
+    if env_host:
+        env_port = int(os.getenv("DB_PORT", 3306))
+        env_user = os.getenv("DB_USER", "root")
+        env_password = os.getenv("DB_PASSWORD", "")
+        try:
+            return pymysql.connect(
+                host=env_host,
+                port=env_port,
+                user=env_user,
+                password=env_password,
+                cursorclass=pymysql.cursors.DictCursor
+            )
+        except Exception as e:
+            print(f"Error al conectar con variables de entorno a {env_host}:{env_port}: {e}")
+            # Continuamos con los fallbacks locales
+
+    for config in DB_CONFIGS:
+        try:
+            return pymysql.connect(
+                cursorclass=pymysql.cursors.DictCursor,
+                **config
+            )
+        except Exception:
+            continue
+    raise Exception("No se pudo conectar a MySQL con ninguna de las configuraciones conocidas.")
 
 def run_migration():
     print("Connecting to MySQL...")
     # Connect without database first to create it
-    connection = pymysql.connect(
-        host=MYSQL_HOST,
-        port=MYSQL_PORT,
-        user=MYSQL_USER,
-        password=MYSQL_PASSWORD,
-        cursorclass=pymysql.cursors.DictCursor
-    )
+    try:
+        connection = connect_with_fallbacks()
+    except Exception as e:
+        print(f"Error: {e}")
+        return
     
     try:
         with connection.cursor() as cursor:

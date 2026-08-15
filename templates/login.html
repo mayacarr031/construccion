@@ -1,41 +1,300 @@
 <!DOCTYPE html>
-<html lang="es">
-
+<html class="light" lang="es">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Iniciar Sesión — Sentiment Analyzer</title>
-  <link rel="stylesheet" href="/static/css/styles.css" />
+    <meta charset="utf-8"/>
+    <meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+    <title>Serene Pulse - Iniciar Sesión</title>
+    <script>
+        // Evitar destello de tema claro
+        if (localStorage.getItem('theme') === 'dark') {
+            document.documentElement.classList.add('dark');
+            document.documentElement.classList.remove('light');
+        } else {
+            document.documentElement.classList.add('light');
+            document.documentElement.classList.remove('dark');
+        }
+    </script>
+    <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+    <link href="https://fonts.googleapis.com" rel="preconnect"/>
+    <link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+    <link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@400;500;600;700&amp;display=swap" rel="stylesheet"/>
+    <script id="tailwind-config">
+        tailwind.config = {
+          darkMode: "class",
+          theme: {
+            extend: {
+              "colors": {
+                      "surface-dim": "#d9dadb",
+                      "surface-bright": "#f8f9fa",
+                      "outline-variant": "#c9c5cf",
+                      "on-secondary-fixed": "#01201c",
+                      "inverse-primary": "#c8c1f0",
+                      "surface-container-highest": "#e1e3e4",
+                      "on-primary-fixed-variant": "#474269",
+                      "inverse-on-surface": "#f0f1f2",
+                      "on-primary-fixed": "#1b163b",
+                      "on-error": "#ffffff",
+                      "tertiary-container": "#eccecb",
+                      "surface-container": "#edeeef",
+                      "on-surface-variant": "var(--color-on-surface-variant)",
+                      "secondary-fixed": "#c8e9e2",
+                      "on-error-container": "#93000a",
+                      "secondary-container": "#c8e9e2",
+                      "on-primary-container": "#5c5780",
+                      "on-tertiary-container": "#6d5654",
+                      "on-tertiary-fixed-variant": "#574240",
+                      "on-surface": "var(--color-on-surface)",
+                      "inverse-surface": "#2e3132",
+                      "on-tertiary": "#ffffff",
+                      "on-secondary": "#ffffff",
+                      "on-secondary-fixed-variant": "#2f4c47",
+                      "surface-container-low": "var(--color-surface-container-low)",
+                      "secondary-fixed-dim": "#adcdc7",
+                      "primary": "#5e5983",
+                      "on-background": "var(--color-on-background)",
+                      "on-secondary-container": "#4c6a65",
+                      "on-tertiary-fixed": "#281716",
+                      "primary-container": "#d6cfff",
+                      "background": "var(--color-background)",
+                      "surface-tint": "#5e5983",
+                      "tertiary-fixed-dim": "#ddc0bd",
+                      "secondary": "#46645f",
+                      "surface": "var(--color-surface)",
+                      "outline": "var(--color-outline)",
+                      "tertiary": "#705957",
+                      "surface-variant": "#e1e3e4",
+                      "error": "#ba1a1a",
+                      "surface-container-lowest": "var(--color-surface-container-lowest)",
+                      "primary-fixed-dim": "#c8c1f0",
+                      "error-container": "#ffdad6",
+                      "on-primary": "#ffffff",
+                      "tertiary-fixed": "#fadbd8",
+                      "primary-fixed": "#e5deff",
+                      "surface-container-high": "#e7e8e9"
+              },
+              "borderRadius": {
+                      "DEFAULT": "1rem",
+                      "lg": "2rem",
+                      "xl": "3rem",
+                      "full": "9999px"
+              },
+              "spacing": {
+                      "unit": "8px",
+                      "stack-lg": "48px",
+                      "stack-sm": "12px",
+                      "container-padding": "32px",
+                      "stack-md": "24px",
+                      "gutter": "24px"
+              },
+              "fontFamily": {
+                      "display-lg": ["Quicksand"],
+                      "body-lg": ["Quicksand"],
+                      "label-sm": ["Quicksand"],
+                      "display-lg-mobile": ["Quicksand"],
+                      "headline-md": ["Quicksand"],
+                      "body-md": ["Quicksand"]
+              },
+              "fontSize": {
+                      "display-lg": [
+                              "48px",
+                              {
+                                      "lineHeight": "1.2",
+                                      "letterSpacing": "-0.02em",
+                                      "fontWeight": "700"
+                              }
+                      ],
+                      "body-lg": [
+                              "18px",
+                              {
+                                      "lineHeight": "1.6",
+                                      "fontWeight": "500"
+                              }
+                      ],
+                      "label-sm": [
+                              "12px",
+                              {
+                                      "lineHeight": "1",
+                                      "letterSpacing": "0.05em",
+                                      "fontWeight": "600"
+                              }
+                      ],
+                      "display-lg-mobile": [
+                              "32px",
+                              {
+                                      "lineHeight": "1.2",
+                                      "fontWeight": "700"
+                              }
+                      ],
+                      "headline-md": [
+                              "24px",
+                              {
+                                      "lineHeight": "1.4",
+                                      "fontWeight": "600"
+                              }
+                      ],
+                      "body-md": [
+                              "16px",
+                              {
+                                      "lineHeight": "1.6",
+                                      "fontWeight": "400"
+                              }
+                      ]
+              }
+            },
+          },
+        }
+    </script>
+    <style>
+        :root {
+            --color-background: #f8f9fa;
+            --color-on-background: #191c1d;
+            --color-surface-container-lowest: #ffffff;
+            --color-surface-container-low: #f3f4f5;
+            --color-surface: #f8f9fa;
+            --color-on-surface: #191c1d;
+            --color-on-surface-variant: #48464e;
+            --color-outline: #78767f;
+        }
+        .dark {
+            --color-background: #121016;
+            --color-on-background: #e0dbec;
+            --color-surface-container-lowest: #151221;
+            --color-surface-container-low: #1c192b;
+            --color-surface: #121016;
+            --color-on-surface: #ffffff;
+            --color-on-surface-variant: #b0a9c0;
+            --color-outline: #8d8a9a;
+        }
+
+        body {
+            background-color: var(--color-background);
+            color: var(--color-on-background);
+        }
+
+        .glass-panel {
+            background: rgba(255, 255, 255, 0.6);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            border: 1px solid rgba(255, 255, 255, 0.4);
+        }
+        .dark .glass-panel {
+            background: rgba(25, 22, 38, 0.6);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+        }
+        
+        .input-hollow {
+            background-color: #F1F3F5;
+            border: 1px solid transparent;
+            transition: all 0.3s ease;
+        }
+        .dark .input-hollow {
+            background-color: #201d2d;
+            color: #ffffff;
+        }
+        
+        .input-hollow:focus {
+            outline: none;
+            border-color: #c8c1f0;
+            box-shadow: 0 0 15px rgba(200, 193, 240, 0.3);
+            background-color: #ffffff;
+        }
+        .dark .input-hollow:focus {
+            background-color: #191626;
+            border-color: #5e5983;
+        }
+
+        .btn-primary-gradient {
+            background: linear-gradient(135deg, #5e5983 0%, #c8c1f0 100%);
+            transition: opacity 0.3s ease, transform 0.2s ease;
+        }
+        
+        .btn-primary-gradient:hover {
+            opacity: 0.9;
+            transform: scale(1.02);
+        }
+    </style>
 </head>
-
-<body>
-
-  <div class="login-wrapper">
-    <div class="login-card">
-      <div class="login-logo" aria-hidden="true">🤖</div>
-      <h1>Sentiment Analyzer</h1>
-      <p>Ingresa con tu cuenta institucional para continuar</p>
-
-      {% if error %}
-      <div class="error-msg" role="alert">⚠️ {{ error }}</div>
-      {% endif %}
-
-      <form id="loginForm" action="/login" method="post" novalidate>
-
-        <div class="input-group">
-          <label for="email">Correo institucional</label>
-          <input type="email" id="email" name="email" placeholder="usuario@lasallistas.org.mx" autocomplete="email"
-            required />
-        </div>
-
-        <div class="input-group">
-          <label for="password">Contraseña</label>
-          <input type="password" id="password" name="password" placeholder="••••••••" autocomplete="current-password"
-            required />
-        </div>
-
-        <button type="submit" class="btn-login" id="loginBtn">
-          Ingresar
+<body class="bg-background dark:bg-[#121016] min-h-screen flex items-center justify-center p-container-padding relative overflow-hidden font-body-md text-on-surface dark:text-[#e0dbec] transition-colors duration-300">
+    <!-- Floating Theme Toggle -->
+    <div class="absolute top-6 right-6 z-50">
+        <button onclick="toggleDarkMode()" class="p-3 rounded-full bg-surface-container/80 dark:bg-[#1f1a30]/80 text-primary dark:text-[#b4aaf2] border border-white/20 dark:border-white/5 shadow-md backdrop-blur-md flex items-center justify-center hover:scale-110 transition-transform">
+            <span class="material-symbols-outlined" id="theme-icon">dark_mode</span>
         </button>
+    </div>
+    <div class="absolute top-[-10%] left-[-10%] w-[50%] h-[50%] rounded-full bg-secondary-fixed opacity-30 blur-[100px] -z-10 dark:opacity-15"></div>
+    <div class="absolute bottom-[-10%] right-[-10%] w-[60%] h-[60%] rounded-full bg-primary-container opacity-40 blur-[120px] -z-10 dark:opacity-20"></div>
+    <div class="w-full max-w-[1000px] mx-auto grid grid-cols-1 md:grid-cols-2 gap-stack-lg items-center z-10">
+        <!-- Left Side: Context & Branding -->
+        <div class="flex flex-col justify-center space-y-stack-md text-center md:text-left order-2 md:order-1 px-4 md:px-0">
+            <div>
+                <h1 class="font-display-lg-mobile text-display-lg-mobile md:font-display-lg md:text-display-lg text-primary dark:text-[#b4aaf2] mb-unit">Serene Pulse</h1>
+                <p class="font-headline-md text-headline-md text-on-surface-variant dark:text-[#b0a9c0] opacity-80">El Observador Silencioso.</p>
+            </div>
+            <p class="font-body-lg text-body-lg text-on-surface-variant dark:text-[#b0a9c0] max-w-[400px] mx-auto md:mx-0 leading-relaxed">
+                Serene Pulse utiliza modelos de lenguaje locales avanzados para visualizar tu paisaje emocional, ayudándote a encontrar claridad y calma a través del análisis de datos.
+            </p>
+        </div>
+        <!-- Right Side: Login Form Canvas -->
+        <div class="glass-panel rounded-xl p-8 md:p-12 shadow-[0_20px_40px_rgba(94,89,131,0.05)] flex flex-col items-center justify-center order-1 md:order-2 w-full max-w-[450px] mx-auto">
+            <img alt="Serene Pulse Logo" class="w-24 h-24 rounded-full mb-stack-md shadow-[0_10px_30px_rgba(200,193,240,0.3)] object-cover" src="https://lh3.googleusercontent.com/aida/AP1WRLvTpvVzbm6t3e3pSe3PNivw3uCzrxL4N9ILyVl0lTorK6yAWKcIPNqqKSrkC5bPl1ny1kAHGAE5XRYr8r4GVJvTZ5wAEP3t6qFqsD74O63ceAUogWS_Q3BtJVC1KRcwHVINZ8xZUHnM8riyNQ32-MFcstx7QZ3DMzcKMRi7zjNIUqINrrg_mADgoi9QgT5A-D7BCiROhMQrUMhrounANLT9vIW56u1vQMRhPUog5WKDHgBO8cIGy2KeFA"/>
+            <h2 class="font-headline-md text-headline-md text-on-surface dark:text-white mb-stack-lg">Iniciar Sesión</h2>
+            
+            {% if error %}
+            <div class="w-full p-4 mb-4 text-sm text-error bg-error-container/30 border border-error/20 rounded-xl text-center font-bold">
+                {{ error }}
+            </div>
+            {% endif %}
+            
+            {% if success %}
+            <div class="w-full p-4 mb-4 text-sm text-secondary bg-secondary-container/30 border border-secondary/20 rounded-xl text-center font-bold text-on-secondary-container">
+                {{ success }}
+            </div>
+            {% endif %}
+            
+            <form action="/login" method="POST" class="w-full flex flex-col space-y-stack-sm">
+                <div class="relative w-full">
+                    <span class="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-outline dark:text-[#8d8a9a]">account_circle</span>
+                    <input class="input-hollow w-full rounded-full py-4 pl-12 pr-6 font-body-md text-body-md text-on-surface dark:text-white placeholder:text-outline-variant" placeholder="Usuario" required name="username" id="username" type="text" autocomplete="username"/>
+                </div>
+                <div class="relative w-full">
+                    <span class="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-outline dark:text-[#8d8a9a]">lock</span>
+                    <input class="input-hollow w-full rounded-full py-4 pl-12 pr-6 font-body-md text-body-md text-on-surface dark:text-white placeholder:text-outline-variant" placeholder="Contraseña" required name="password" id="password" type="password" autocomplete="current-password"/>
+                </div>
+                <button class="btn-primary-gradient w-full rounded-full py-4 text-on-primary dark:text-black font-body-lg text-body-lg shadow-[0_10px_20px_rgba(94,89,131,0.15)] flex items-center justify-center gap-2 mt-4" type="submit">
+                    Ingresar al Panel
+                    <span class="material-symbols-outlined">arrow_forward</span>
+                </button>
+                <div class="text-center mt-4">
+                    <a href="/register" class="font-label-sm text-label-sm text-primary dark:text-[#b4aaf2] hover:underline">¿No tienes cuenta? Regístrate aquí</a>
+                </div>
+            </form>
+        </div>
+    </div>
+    <script>
+        function applyTheme() {
+            const isDark = localStorage.getItem('theme') === 'dark';
+            const html = document.documentElement;
+            const icon = document.getElementById('theme-icon');
+            
+            if (isDark) {
+                html.classList.remove('light');
+                html.classList.add('dark');
+                if (icon) icon.innerText = 'light_mode';
+            } else {
+                html.classList.remove('dark');
+                html.classList.add('light');
+                if (icon) icon.innerText = 'dark_mode';
+            }
+        }
 
-      </form>
+        function toggleDarkMode() {
+            const isDark = localStorage.getItem('theme') === 'dark';
+            localStorage.setItem('theme', isDark ? 'light' : 'dark');
+            applyTheme();
+        }
+
+        applyTheme();
+    </script>
+</body>
+</html>
