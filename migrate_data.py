@@ -5,11 +5,13 @@ import pymysql
 # Lista de credenciales a probar en orden
 DB_CONFIGS = [
     # 1. XAMPP por defecto (Puerto 3306, sin clave) — configuración principal
-    {"host": "127.0.0.1", "port": 3306, "user": "root", "password": ""},
-    # 2. Tarea escolar estándar (Puerto 3306, clave password)
-    {"host": "127.0.0.1", "port": 3306, "user": "root", "password": "password"},
-    # 3. Entorno legado (Puerto 3308, clave lasalle)
-    {"host": "127.0.0.1", "port": 3308, "user": "root", "password": "lasalle"},
+    {"host": "127.0.0.1", "port": 3306, "user": "root", "password": "", "connect_timeout": 2},
+    # 2. Contenedor Docker / MariaDB local (Puerto 3308, clave lasalle)
+    {"host": "127.0.0.1", "port": 3308, "user": "root", "password": "lasalle", "connect_timeout": 2},
+    # 3. Tarea escolar estándar (Puerto 3306, clave password)
+    {"host": "127.0.0.1", "port": 3306, "user": "root", "password": "password", "connect_timeout": 2},
+    # 4. Entorno local (Puerto 3306, clave lasalle)
+    {"host": "127.0.0.1", "port": 3306, "user": "root", "password": "lasalle", "connect_timeout": 2},
 ]
 DB_NAME = os.getenv("DB_NAME", 'db_sentimientos')
 CSV_PATH = os.path.join("data", "twitter_validation.csv")
@@ -27,6 +29,7 @@ def connect_with_fallbacks():
                 port=env_port,
                 user=env_user,
                 password=env_password,
+                connect_timeout=3,
                 cursorclass=pymysql.cursors.DictCursor
             )
         except Exception as e:

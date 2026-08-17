@@ -48,11 +48,11 @@ def save_users(users: dict):
 # Inicializar el archivo de usuarios al arrancar el modulo
 init_users_file()
 
-# Configuración de conexión a MySQL con soporte de variables de entorno y fallbacks automáticos
+# Configuración de conexión a MySQL/MariaDB con soporte de variables de entorno y fallbacks automáticos
 def get_db_connection():
     import os
 
-    # 1. Variables de entorno tienen máxima prioridad (usadas cuando corre en Docker)
+    # 1. Variables de entorno tienen máxima prioridad (usadas en Docker o conexión remota)
     env_host = os.getenv("DB_HOST")
     if env_host:
         env_port = int(os.getenv("DB_PORT", 3306))
@@ -66,6 +66,7 @@ def get_db_connection():
                 user=env_user,
                 password=env_password,
                 database=env_database,
+                connect_timeout=3,
                 cursorclass=pymysql.cursors.DictCursor
             )
         except Exception as e:
@@ -79,29 +80,58 @@ def get_db_connection():
             user='root',
             password='',
             database='db_sentimientos',
+            connect_timeout=2,
             cursorclass=pymysql.cursors.DictCursor
         )
     except Exception:
-        try:
-            # 3. Fallback secundario (contraseña 'password')
-            return pymysql.connect(
-                host='127.0.0.1',
-                port=3306,
-                user='root',
-                password='password',
-                database='db_sentimientos',
-                cursorclass=pymysql.cursors.DictCursor
-            )
-        except Exception:
-            # 4. Fallback legado (puerto 3308, contraseña 'lasalle')
-            return pymysql.connect(
-                host='127.0.0.1',
-                port=3308,
-                user='root',
-                password='lasalle',
-                database='db_sentimientos',
-                cursorclass=pymysql.cursors.DictCursor
-            )
+        pass
+
+    # 3. Fallback contenedor MariaDB / Docker local (puerto 3308, contraseña 'lasalle')
+    try:
+        return pymysql.connect(
+            host='127.0.0.1',
+            port=3308,
+            user='root',
+            password='lasalle',
+            database='db_sentimientos',
+            connect_timeout=2,
+            cursorclass=pymysql.cursors.DictCursor
+        )
+    except Exception:
+        pass
+
+    # 4. Fallback secundario (puerto 3306, contraseña 'password')
+    try:
+        return pymysql.connect(
+            host='127.0.0.1',
+            port=3306,
+            user='root',
+            password='password',
+            database='db_sentimientos',
+            connect_timeout=2,
+            cursorclass=pymysql.cursors.DictCursor
+        )
+    except Exception:
+        pass
+
+    # 5. Fallback legado (puerto 3306, contraseña 'lasalle')
+    try:
+        return pymysql.connect(
+            host='127.0.0.1',
+            port=3306,
+            user='root',
+            password='lasalle',
+            database='db_sentimientos',
+            connect_timeout=2,
+            cursorclass=pymysql.cursors.DictCursor
+        )
+    except Exception:
+        pass
+
+    raise HTTPException(
+        status_code=503,
+        detail="No se pudo establecer conexión con la base de datos MySQL/MariaDB (revisa XAMPP, contenedor Docker o variables de entorno)."
+    )
 
 
 # Inicializar cliente compatible con la API de OpenAI para LM Studio
@@ -109,7 +139,9 @@ def get_db_connection():
 # En local usa http://127.0.0.1:1234/v1 como fallback
 client = OpenAI(
     base_url=os.getenv("LLM_BASE_URL", "http://127.0.0.1:1234/v1"),
-    api_key="lm-studio"
+    api_key="lm-studio",
+    timeout=3.0,
+    max_retries=1
 )
 
 def get_model_name() -> str:
@@ -119,7 +151,7 @@ def get_model_name() -> str:
         return env_model
     # 2. De lo contrario, intentamos detectar dinámicamente el modelo cargado en LM Studio
     try:
-        models = client.models.list()
+        models = client.models.list(timeout=2.0)
         if models.data:
             return models.data[0].id
     except Exception:
@@ -147,7 +179,8 @@ def clasificar_sentimiento_lmstudio(texto: str) -> dict:
                 {"role": "user", "content": f"Text: {texto}"}
             ],
             temperature=0.0, # Temperatura 0 para mayor determinismo y consistencia
-            max_tokens=5
+            max_tokens=5,
+            timeout=2.0
         )
         
         raw_reply = response.choices[0].message.content.strip()
