@@ -1,8 +1,10 @@
 import os
 import pymysql
 
-# Cargar variables de .env
-def load_env_file(filepath=".env"):
+# Cargar variables de .env asegurando la ruta absoluta del archivo
+def load_env_file(filepath=None):
+    if filepath is None:
+        filepath = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".env")
     if os.path.exists(filepath):
         with open(filepath, "r", encoding="utf-8") as f:
             for line in f:
@@ -12,14 +14,14 @@ def load_env_file(filepath=".env"):
                 k, v = line.split("=", 1)
                 k = k.strip()
                 v = v.strip().strip("'\"")
-                if k and k not in os.environ:
+                if k:
                     os.environ[k] = v
 
 load_env_file()
 
-host = os.getenv("DB_HOST", "172.20.64.1")
-port = int(os.getenv("DB_PORT", 3306))
-user = os.getenv("DB_USER", "testmike")
+host = os.getenv("DB_HOST", "127.0.0.1")
+port = int(os.getenv("DB_PORT", 3308))
+user = os.getenv("DB_USER", "root")
 password = os.getenv("DB_PASSWORD", "lasalle")
 db_name = os.getenv("DB_NAME", "db_sentimientos")
 
