@@ -296,7 +296,6 @@ def predecir_con_fastapi(
 # =========================================================
 
 def conectar_mysql():
-def conectar_mysql():
     """
     Conexión directa y exclusiva al contenedor de MariaDB.
     """
