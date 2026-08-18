@@ -93,7 +93,16 @@ def run_migration():
             cursor.execute(create_table_sql)
             print("[OK] Tabla 'tweets' verificada/creada.")
 
-            # 3. Leer CSV e importar
+            # 3. Leer CSV e importar (o descargar si no existe)
+            if not os.path.exists(CSV_PATH):
+                print(f"[INFO] Archivo CSV no encontrado en '{CSV_PATH}'. Descargando automáticamente...")
+                try:
+                    from download_dataset import download_dataset
+                    download_dataset()
+                except Exception as e_dl:
+                    print(f"[ERROR] No se pudo descargar el dataset: {e_dl}")
+                    return
+
             if not os.path.exists(CSV_PATH):
                 print(f"[ERROR] Archivo CSV no encontrado en '{CSV_PATH}'.")
                 return

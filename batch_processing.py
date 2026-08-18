@@ -297,47 +297,40 @@ def predecir_con_fastapi(
 
 def conectar_mysql():
     """
-    Conexión con MySQL con fallbacks (Docker, XAMPP, local estándar, y variables de entorno).
+    Conexión directa y exclusiva al contenedor de MariaDB.
     """
-    # Si se definen variables de entorno, priorizamos esa conexión directa (útil para contenedores remotos)
-    env_host = os.getenv("DB_HOST")
-    if env_host:
-        env_port = int(os.getenv("DB_PORT", 3306))
-        env_user = os.getenv("DB_USER", "root")
-        env_password = os.getenv("DB_PASSWORD", "")
-        env_database = os.getenv("DB_NAME", "db_sentimientos")
-        try:
-            return pymysql.connect(
-                host=env_host,
-                port=env_port,
-                user=env_user,
-                password=env_password,
-                database=env_database,
-                cursorclass=pymysql.cursors.DictCursor,
-                autocommit=False
-            )
-        except Exception as e:
-            print(f"Error al conectar con variables de entorno a {env_host}:{env_port}: {e}")
-            # Continuamos con los fallbacks locales
+    host = os.getenv("DB_HOST", "127.0.0.1")
+    port = int(os.getenv("DB_PORT", 3308))
+    user = os.getenv("DB_USER", "root")
+    password = os.getenv("DB_PASSWORD", "lasalle")
+    database = os.getenv("DB_NAME", "db_sentimientos")
 
-    db_configs = [
-        # 1. Entorno Docker (Puerto 3308, clave lasalle)
-        {"host": "127.0.0.1", "port": 3308, "user": "root", "password": "lasalle", "database": "db_sentimientos"},
-        # 2. XAMPP por defecto (Puerto 3306, sin clave)
-        {"host": "127.0.0.1", "port": 3306, "user": "root", "password": "", "database": "db_sentimientos"},
-        # 3. Tarea escolar estándar (Puerto 3306, clave password)
-        {"host": "127.0.0.1", "port": 3306, "user": "root", "password": "password", "database": "db_sentimientos"}
-    ]
-    for config in db_configs:
+    try:
+        return pymysql.connect(
+            host=host,
+            port=port,
+            user=user,
+            password=password,
+            database=database,
+            cursorclass=pymysql.cursors.DictCursor,
+            autocommit=False,
+            connect_timeout=5
+        )
+    except Exception as e:
+        # Fallback si se ejecuta dentro de la red Docker interna
         try:
             return pymysql.connect(
+                host="mariadb",
+                port=3306,
+                user=user,
+                password=password,
+                database=database,
                 cursorclass=pymysql.cursors.DictCursor,
                 autocommit=False,
-                **config
+                connect_timeout=3
             )
         except Exception:
-            continue
-    raise Exception("No se pudo conectar a MySQL con ninguna de las configuraciones conocidas.")
+            raise Exception(f"No se pudo conectar al contenedor MariaDB en {host}:{port} ({e}).")
 
 
 def guardar_prediccion_mysql(

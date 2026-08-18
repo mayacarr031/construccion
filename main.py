@@ -64,81 +64,39 @@ def save_users(users: dict):
 # Inicializar el archivo de usuarios al arrancar el modulo
 init_users_file()
 
-# Configuración de conexión a MySQL/MariaDB con soporte de variables de entorno y fallbacks automáticos
+# Configuración de conexión exclusiva al contenedor MariaDB
 def get_db_connection():
     import os
 
-    # 1. Variables de entorno tienen máxima prioridad (usadas en Docker o conexión remota)
-    env_host = os.getenv("DB_HOST")
-    if env_host:
-        env_port = int(os.getenv("DB_PORT", 3306))
-        env_user = os.getenv("DB_USER", "root")
-        env_password = os.getenv("DB_PASSWORD", "")
-        env_database = os.getenv("DB_NAME", "db_sentimientos")
-        try:
-            return pymysql.connect(
-                host=env_host,
-                port=env_port,
-                user=env_user,
-                password=env_password,
-                database=env_database,
-                connect_timeout=3,
-                cursorclass=pymysql.cursors.DictCursor
-            )
-        except Exception as e:
-            print(f"Error al conectar con variables de entorno a {env_host}:{env_port}: {e}")
+    # 1. Variables de entorno configuradas en .env o Docker
+    host = os.getenv("DB_HOST", "127.0.0.1")
+    port = int(os.getenv("DB_PORT", 3308))
+    user = os.getenv("DB_USER", "root")
+    password = os.getenv("DB_PASSWORD", "lasalle")
+    database = os.getenv("DB_NAME", "db_sentimientos")
 
-    # 2. Fallback principal: XAMPP local (puerto 3306, sin contraseña)
     try:
         return pymysql.connect(
-            host='127.0.0.1',
-            port=3306,
-            user='root',
-            password='',
-            database='db_sentimientos',
-            connect_timeout=2,
+            host=host,
+            port=port,
+            user=user,
+            password=password,
+            database=database,
+            connect_timeout=5,
             cursorclass=pymysql.cursors.DictCursor
         )
-    except Exception:
-        pass
+    except Exception as e:
+        print(f"[ERROR] Error al conectar al contenedor MariaDB ({host}:{port}, usuario: {user}): {e}")
 
-    # 3. Fallback contenedor MariaDB / Docker local (puerto 3308, contraseña 'lasalle')
+    # 2. Fallback de contenedor MariaDB si se ejecuta dentro de red Docker (host: mariadb, puerto: 3306)
     try:
         return pymysql.connect(
-            host='127.0.0.1',
-            port=3308,
-            user='root',
-            password='lasalle',
-            database='db_sentimientos',
-            connect_timeout=2,
-            cursorclass=pymysql.cursors.DictCursor
-        )
-    except Exception:
-        pass
-
-    # 4. Fallback secundario (puerto 3306, contraseña 'password')
-    try:
-        return pymysql.connect(
-            host='127.0.0.1',
+            host="mariadb",
             port=3306,
-            user='root',
-            password='password',
-            database='db_sentimientos',
-            connect_timeout=2,
-            cursorclass=pymysql.cursors.DictCursor
-        )
-    except Exception:
-        pass
-
-    # 5. Fallback legado (puerto 3306, contraseña 'lasalle')
-    try:
-        return pymysql.connect(
-            host='127.0.0.1',
-            port=3306,
-            user='root',
-            password='lasalle',
-            database='db_sentimientos',
-            connect_timeout=2,
+            user=user,
+            password=password,
+            database=database,
+            connect_timeout=3,
             cursorclass=pymysql.cursors.DictCursor
         )
     except Exception:
@@ -146,7 +104,7 @@ def get_db_connection():
 
     raise HTTPException(
         status_code=503,
-        detail="No se pudo establecer conexión con la base de datos MySQL/MariaDB (revisa XAMPP, contenedor Docker o variables de entorno)."
+        detail=f"No se pudo establecer conexión con el contenedor MariaDB en {host}:{port}. Verifica que el contenedor 'construccion_mariadb' esté corriendo."
     )
 
 
