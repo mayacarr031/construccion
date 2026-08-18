@@ -1,10 +1,28 @@
 # ── docker-compose.yml ────────────────────────────────────
-# Levanta FastAPI en Docker conectado a XAMPP MySQL + LM Studio
-# que corren en el host Windows (no en Docker)
+# Despliegue completo con FastAPI y MariaDB en contenedores Docker,
+# con soporte para conexión a LM Studio local vía host.docker.internal
 # ──────────────────────────────────────────────────────────
 version: "3.9"
 
 services:
+  mariadb:
+    image: mariadb:10.4
+    container_name: construccion_mariadb
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${DB_PASSWORD:-lasalle}
+      MYSQL_DATABASE: ${DB_NAME:-db_sentimientos}
+    ports:
+      - "${DB_CONTAINER_PORT:-3308}:3306"
+    volumes:
+      - mariadb_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${DB_PASSWORD:-lasalle}"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+
   fastapi:
     build: .
     image: construccion-fastapi:latest
@@ -14,7 +32,7 @@ services:
       - "8000:8000"
     env_file:
       - .env
-    # Permite resolver host.docker.internal en Linux Docker Desktop
+    # Permite resolver host.docker.internal en Linux Docker Desktop para LM Studio
     extra_hosts:
       - "host.docker.internal:host-gateway"
     healthcheck:
@@ -23,3 +41,7 @@ services:
       timeout: 10s
       retries: 3
       start_period: 15s
+
+volumes:
+  mariadb_data:
+
