@@ -72,8 +72,8 @@ def get_db_connection():
     env_host = os.getenv("DB_HOST")
     if env_host:
         env_port = int(os.getenv("DB_PORT", 3306))
-        env_user = os.getenv("DB_USER", "root")
-        env_password = os.getenv("DB_PASSWORD", "")
+        env_user = os.getenv("DB_USER", "testmike")
+        env_password = os.getenv("DB_PASSWORD", "lasalle")
         env_database = os.getenv("DB_NAME", "db_sentimientos")
         try:
             return pymysql.connect(
@@ -105,9 +105,9 @@ def get_db_connection():
     # 3. Fallback contenedor MariaDB / Docker local (puerto 3308, contraseña 'lasalle')
     try:
         return pymysql.connect(
-            host='127.0.0.1',
-            port=3308,
-            user='root',
+            host='172.31.155.3',
+            port=3306,
+            user='testmike',
             password='lasalle',
             database='db_sentimientos',
             connect_timeout=2,
