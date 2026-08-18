@@ -27,8 +27,10 @@ import pandas as pd
 import pymysql
 import requests
 
-# Cargar automáticamente variables de .env
-def _load_env_file(filepath=".env"):
+# Cargar automáticamente variables de .env asegurando la ruta absoluta
+def _load_env_file(filepath=None):
+    if filepath is None:
+        filepath = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".env")
     if os.path.exists(filepath):
         with open(filepath, "r", encoding="utf-8") as f:
             for line in f:
@@ -38,7 +40,7 @@ def _load_env_file(filepath=".env"):
                 k, v = line.split("=", 1)
                 k = k.strip()
                 v = v.strip().strip("'\"")
-                if k and k not in os.environ:
+                if k:
                     os.environ[k] = v
 
 _load_env_file()
